@@ -1,42 +1,175 @@
 use std::env;
 use std::path::PathBuf;
+use std::process::Command;
+use std::fs;
 
 fn main() {
+    if env::var("DOCS_RS").is_ok() {
+        println!("cargo:warning=Skipping native build and bindgen on docs.rs");
+        return;
+    }
+
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
-    
+
     println!("cargo:rerun-if-changed=wrapper.h");
     println!("cargo:rerun-if-changed=wrapper.cpp");
-    println!("cargo:rerun-if-changed=KittyMemory/KittyMemory");
+    println!("cargo:rerun-if-env-changed=KITTYMEMORY_PATH");
+    println!("cargo:rerun-if-env-changed=CARGO_FEATURE_KEYSTONE");
 
-    let kittymemory_dir = PathBuf::from("KittyMemory");
+    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+
+    let kittymemory_dir = if let Ok(p) = env::var("KITTYMEMORY_PATH") {
+        PathBuf::from(p)
+    } else if PathBuf::from("KittyMemory").exists() {
+        PathBuf::from("KittyMemory")
+    } else {
+        let dest = out_dir.join("KittyMemory");
+        if !dest.exists() {
+            println!("cargo:warning=Cloning KittyMemory into {}", dest.display());
+            let status = Command::new("git")
+                .args(&["clone", "--depth", "1", "https://github.com/MJx0/KittyMemory", dest.to_str().unwrap()])
+                .status()
+                .expect("Failed to spawn git - ensure `git` is installed and in PATH");
+            if !status.success() {
+                panic!("git clone failed with status: {}", status);
+            }
+            let sm_status = Command::new("git")
+                .current_dir(&dest)
+                .args(&["submodule", "update", "--init", "--recursive"]) 
+                .status();
+
+            match sm_status {
+                Ok(s) if s.success() => {
+                    println!("cargo:warning=Initialized git submodules for KittyMemory");
+                }
+                Ok(s) => {
+                    println!("cargo:warning=git submodule update exited with {} — continuing", s);
+                }
+                Err(e) => {
+                    println!("cargo:warning=Failed to run git submodule update: {} — continuing", e);
+                }
+            }
+        }
+        dest
+    };
+
+    let mut src_root = kittymemory_dir.clone();
+    let sample_source = src_root.join("KittyUtils.cpp");
+    if !sample_source.exists() {
+        let nested = kittymemory_dir.join("KittyMemory");
+        if nested.exists() {
+            src_root = nested;
+        }
+    }
 
     let mut build = cc::Build::new();
-    
+
     build
         .cpp(true)
         .flag_if_supported("-std=c++17")
-        .include(".")
         .include(&kittymemory_dir)
-        .include("KittyMemory/Deps/Keystone/includes")
+        .include(&src_root)
+        .include(kittymemory_dir.join("Deps/Keystone/includes"))
         .flag("-include")
         .flag("kittymemory_fix.hpp")
         .file("wrapper.cpp");
 
-        if cfg!(feature = "keystone") {
-        let target_arch = env::var("CARGO_CFG_TARGET_ARCH")
-            .expect("CARGO_CFG_TARGET_ARCH not set — are you cross-compiling properly?");
+    if cfg!(feature = "keystone") {
+        let target_arch = env::var("CARGO_CFG_TARGET_ARCH").expect("CARGO_CFG_TARGET_ARCH not set — are you cross-compiling properly?");
 
-        let keystone_lib_dir = match (target_os.as_str(), target_arch.as_str()) {
-            ("android", "aarch64") => "KittyMemory/Deps/Keystone/libs-android/arm64-v8a",
-            ("android", "arm")     => "KittyMemory/Deps/Keystone/libs-android/armeabi-v7a",
-            ("android", "x86")     => "KittyMemory/Deps/Keystone/libs-android/x86",
-            ("android", "x86_64")  => "KittyMemory/Deps/Keystone/libs-android/x86_64",
-            ("ios", _)             => "KittyMemory/Deps/Keystone/libs-ios",
-            _ => panic!("Unsupported platform/arch combo for keystone: {} {}", target_os, target_arch),
-        };
+        let candidates = vec![
+            out_dir.join("KittyMemory/KittyMemory/Deps/Keystone"),
+            kittymemory_dir.join("Deps/Keystone"),
+            kittymemory_dir.join("Deps/keystone"),
+            kittymemory_dir.join("KittyMemory/Deps/Keystone"),
+            kittymemory_dir.join("KittyMemory/Deps/keystone"),
+            src_root.join("Deps/Keystone"),
+            src_root.join("Deps/keystone"),
+            src_root.join("KittyMemory/Deps/Keystone"),
+            src_root.join("KittyMemory/Deps/keystone"),
+            out_dir.join("KittyMemory/Deps/Keystone"),
+            out_dir.join("KittyMemory/Deps/keystone"),
+            out_dir.join("KittyMemory/KittyMemory/Deps/Keystone"),
+            out_dir.join("KittyMemory/KittyMemory/Deps/keystone"),
+        ];
 
-        println!("cargo:rustc-link-search=native={}", keystone_lib_dir);
-        println!("cargo:rustc-link-lib=static=keystone");
+        fn find_lib_dir(cands: &[PathBuf], target_os: &str, target_arch: &str) -> Option<PathBuf> {
+            for base in cands {
+                let libdir = match (target_os, target_arch) {
+                    ("android", "aarch64") => base.join("libs-android/arm64-v8a"),
+                    ("android", "arm") => base.join("libs-android/armeabi-v7a"),
+                    ("android", "x86") => base.join("libs-android/x86"),
+                    ("android", "x86_64") => base.join("libs-android/x86_64"),
+                    ("ios", _) => base.join("libs-ios"),
+                    _ => base.join("libs"),
+                };
+
+                if libdir.exists() {
+                    return Some(libdir);
+                }
+
+                let alt = match (target_os, target_arch) {
+                    ("android", "aarch64") => base.join("libs/Android/arm64-v8a"),
+                    ("android", "arm") => base.join("libs/Android/armeabi-v7a"),
+                    ("android", "x86") => base.join("libs/Android/x86"),
+                    ("android", "x86_64") => base.join("libs/Android/x86_64"),
+                    _ => base.join("libs"),
+                };
+                if alt.exists() {
+                    return Some(alt);
+                }
+            }
+
+            for base in cands {
+                if !base.exists() {
+                    continue;
+                }
+
+                fn search_dir(dir: &PathBuf, depth: usize) -> Option<PathBuf> {
+                    if depth == 0 {
+                        return None;
+                    }
+                    let entries = match fs::read_dir(dir) {
+                        Ok(e) => e,
+                        Err(_) => return None,
+                    };
+                    for entry in entries.flatten() {
+                        let p = entry.path();
+                        if p.is_dir() {
+                            if let Some(found) = search_dir(&p, depth - 1) {
+                                return Some(found);
+                            }
+                        } else if p.is_file() {
+                            if let Some(name) = p.file_name().and_then(|n| n.to_str()) {
+                                let lname = name.to_lowercase();
+                                if lname == "libkeystone.a" || (lname.contains("keystone") && lname.ends_with(".a")) {
+                                    return p.parent().map(|pp| pp.to_path_buf());
+                                }
+                            }
+                        }
+                    }
+                    None
+                }
+
+                if let Some(found) = search_dir(base, 6) {
+                    return Some(found);
+                }
+            }
+
+            None
+        }
+
+        for c in &candidates {
+            println!("cargo:warning=Keystone candidate path: {} (exists={})", c.display(), c.exists());
+        }
+
+        if let Some(keystone_lib_dir) = find_lib_dir(&candidates, target_os.as_str(), target_arch.as_str()) {
+            println!("cargo:rustc-link-search=native={}", keystone_lib_dir.display());
+            println!("cargo:rustc-link-lib=static=keystone");
+        } else {
+            println!("cargo:warning=Keystone libs not found in expected Deps paths; disabling keystone feature");
+            build.define("kNO_KEYSTONE", None);
+        }
     } else {
         build.define("kNO_KEYSTONE", None);
     }
@@ -53,7 +186,7 @@ fn main() {
     ];
 
     for source in sources {
-        let source_path = kittymemory_dir.join(source);
+        let source_path = src_root.join(source);
         build.file(&source_path);
     }
 
@@ -63,23 +196,6 @@ fn main() {
     } else if target_os == "ios" {
         build.define("__APPLE__", None);
         println!("cargo:rustc-link-lib=framework=Foundation");
-    }
-
-    if cfg!(feature = "keystone") {
-        let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
-        let keystone_lib_dir = match (target_os.as_str(), target_arch.as_str()) {
-            ("android", "aarch64") => "KittyMemory/Deps/Keystone/libs/Android/arm64-v8a",
-            ("android", "arm") => "KittyMemory/Deps/Keystone/libs/Android/armeabi-v7a",
-            ("android", "x86") => "KittyMemory/Deps/Keystone/libs/Android/x86",
-            ("android", "x86_64") => "KittyMemory/Deps/Keystone/libs/Android/x86_64",
-            ("ios", _) => "KittyMemory/Deps/Keystone/libs/iOS",
-            _ => panic!("Unsupported platform for keystone"),
-        };
-        
-        println!("cargo:rustc-link-search=native={}", keystone_lib_dir);
-        println!("cargo:rustc-link-lib=static=keystone");
-    } else {
-        build.define("kNO_KEYSTONE", None);
     }
 
     build.compile("kittymemory");
