@@ -2,12 +2,13 @@
 name = "kittymemory-rs"
 version = "0.1.0"
 edition = "2021"
-authors = ["KittyMemory Rust Bindings"]
+authors = ["Rodroid Dev"]
 description = "Rust bindings for KittyMemory - A memory manipulation library for Android and iOS"
 license = "MIT"
-repository = "https://github.com/MJx0/KittyMemory"
+repository = "https://github.com/rodroidmods/kittymemory-rs"
 keywords = ["memory", "android", "ios", "ffi", "game-hacking"]
 categories = ["external-ffi-bindings", "game-development"]
+readme = "README.md"
 
 [dependencies]
 libc = "0.2"
