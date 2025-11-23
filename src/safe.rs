@@ -1,5 +1,5 @@
 use crate::sys;
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 use std::marker::PhantomData;
 
 pub type Address = usize;
@@ -96,8 +96,7 @@ pub fn get_process_name() -> Result<String, &'static str> {
         if c_str_ptr.is_null() {
             return Err("Failed to get process name");
         }
-        
-        let c_str = CStr::from_ptr(c_str_ptr);
+        let c_str = std::ffi::CStr::from_ptr(c_str_ptr);
         let result = c_str.to_string_lossy().into_owned();
         libc::free(c_str_ptr as *mut std::ffi::c_void);
         Ok(result)

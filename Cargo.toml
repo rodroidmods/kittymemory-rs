@@ -27,6 +27,10 @@ ios = []
 name = "kittymemory"
 path = "src/lib.rs"
 crate-type = ["staticlib", "cdylib"]
+readme = "README.md"
+
+# Exclude large or unnecessary files from the published crate to keep payload < 10MB.
+# Adjust as needed — avoid shipping large vendor binaries or build artifacts.
 
 [profile.release]
 opt-level = "z"
