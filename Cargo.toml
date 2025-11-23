@@ -1,0 +1,44 @@
+[package]
+name = "kittymemory-rs"
+version = "0.1.0"
+edition = "2021"
+authors = ["KittyMemory Rust Bindings"]
+description = "Rust bindings for KittyMemory - A memory manipulation library for Android and iOS"
+license = "MIT"
+repository = "https://github.com/MJx0/KittyMemory"
+keywords = ["memory", "android", "ios", "ffi", "game-hacking"]
+categories = ["external-ffi-bindings", "game-development"]
+
+[dependencies]
+libc = "0.2"
+
+[build-dependencies]
+bindgen = "0.70"
+cc = "1.0"
+
+[features]
+default = []
+keystone = []
+android = []
+ios = []
+
+[lib]
+name = "kittymemory"
+path = "src/lib.rs"
+crate-type = ["staticlib", "cdylib"]
+
+[profile.release]
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+debug = false
+overflow-checks = false
+
+[profile.release.package."*"] 
+opt-level = "z"
+codegen-units = 1
+strip = true
+debug = false
+overflow-checks = false
