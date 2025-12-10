@@ -148,8 +148,17 @@ pub fn mem_write_bytes(address: Address, bytes: &[u8]) -> Result<(), &'static st
 }
 
 pub struct Patch {
-    inner: sys::km_patch_t,
+    pub(crate) inner: sys::km_patch_t,
     _marker: PhantomData<*mut ()>,
+}
+
+#[repr(i32)]
+#[derive(Debug, Clone, Copy)]
+pub enum AsmArch {
+    ARM32 = 0,
+    ARM64 = 1,
+    X86 = 2,
+    X86_64 = 3,
 }
 
 impl Patch {
@@ -160,35 +169,62 @@ impl Patch {
                 bytes.as_ptr() as *const std::ffi::c_void,
                 bytes.len(),
             );
-            
+
             Self {
                 inner: patch,
                 _marker: PhantomData,
             }
         }
     }
-    
+
     pub fn with_hex(address: Address, hex: &str) -> Result<Self, &'static str> {
         let hex_string = hex.replace(" ", "").replace("0x", "");
-        
+
         if hex_string.len() % 2 != 0 {
             return Err("Hex string must have even length");
         }
-        
+
         for c in hex_string.chars() {
             if !c.is_ascii_hexdigit() {
                 return Err("Invalid hex character");
             }
         }
-        
+
         unsafe {
             let c_hex = CString::new(hex_string).unwrap();
             let patch = sys::km_patch_create_hex(address, c_hex.as_ptr());
-            
+
             Ok(Self {
                 inner: patch,
                 _marker: PhantomData,
             })
+        }
+    }
+
+    #[cfg(feature = "keystone")]
+    pub fn with_asm(
+        address: Address,
+        arch: AsmArch,
+        asm_code: &str,
+        asm_address: Address,
+    ) -> Result<Self, &'static str> {
+        unsafe {
+            let c_asm = CString::new(asm_code).unwrap();
+            let patch = sys::km_patch_create_asm(
+                address,
+                arch as i32,
+                c_asm.as_ptr(),
+                asm_address,
+            );
+
+            if patch.valid {
+                Ok(Self {
+                    inner: patch,
+                    _marker: PhantomData,
+                })
+            } else {
+                Err("Failed to create assembly patch")
+            }
         }
     }
     
@@ -239,7 +275,7 @@ unsafe impl Send for Patch {}
 unsafe impl Sync for Patch {}
 
 pub struct Backup {
-    inner: sys::km_backup_t,
+    pub(crate) inner: sys::km_backup_t,
     _marker: PhantomData<*mut ()>,
 }
 
@@ -343,12 +379,103 @@ pub fn find_data_first<T: Sized>(start: Address, end: Address, data: &T) -> Opti
             data as *const T as *const std::ffi::c_void,
             std::mem::size_of::<T>(),
         );
-        
+
         if result == 0 {
             None
         } else {
             Some(result)
         }
+    }
+}
+
+pub fn find_bytes_all(start: Address, end: Address, bytes: &[u8], mask: &str) -> Vec<Address> {
+    unsafe {
+        let c_mask = CString::new(mask).unwrap();
+        let mut results_ptr: *mut usize = std::ptr::null_mut();
+        let count = sys::km_find_bytes_all(
+            start,
+            end,
+            bytes.as_ptr() as *const std::os::raw::c_char,
+            c_mask.as_ptr(),
+            &mut results_ptr as *mut *mut usize,
+        );
+
+        if count == 0 || results_ptr.is_null() {
+            return Vec::new();
+        }
+
+        let slice = std::slice::from_raw_parts(results_ptr, count);
+        let vec = slice.to_vec();
+        sys::km_free_results(results_ptr);
+        vec
+    }
+}
+
+pub fn find_hex_all(start: Address, end: Address, hex: &str, mask: &str) -> Vec<Address> {
+    unsafe {
+        let c_hex = CString::new(hex).unwrap();
+        let c_mask = CString::new(mask).unwrap();
+        let mut results_ptr: *mut usize = std::ptr::null_mut();
+        let count = sys::km_find_hex_all(
+            start,
+            end,
+            c_hex.as_ptr(),
+            c_mask.as_ptr(),
+            &mut results_ptr as *mut *mut usize,
+        );
+
+        if count == 0 || results_ptr.is_null() {
+            return Vec::new();
+        }
+
+        let slice = std::slice::from_raw_parts(results_ptr, count);
+        let vec = slice.to_vec();
+        sys::km_free_results(results_ptr);
+        vec
+    }
+}
+
+pub fn find_pattern_all(start: Address, end: Address, pattern: &str) -> Vec<Address> {
+    unsafe {
+        let c_pattern = CString::new(pattern).unwrap();
+        let mut results_ptr: *mut usize = std::ptr::null_mut();
+        let count = sys::km_find_pattern_all(
+            start,
+            end,
+            c_pattern.as_ptr(),
+            &mut results_ptr as *mut *mut usize,
+        );
+
+        if count == 0 || results_ptr.is_null() {
+            return Vec::new();
+        }
+
+        let slice = std::slice::from_raw_parts(results_ptr, count);
+        let vec = slice.to_vec();
+        sys::km_free_results(results_ptr);
+        vec
+    }
+}
+
+pub fn find_data_all<T: Sized>(start: Address, end: Address, data: &T) -> Vec<Address> {
+    unsafe {
+        let mut results_ptr: *mut usize = std::ptr::null_mut();
+        let count = sys::km_find_data_all(
+            start,
+            end,
+            data as *const T as *const std::ffi::c_void,
+            std::mem::size_of::<T>(),
+            &mut results_ptr as *mut *mut usize,
+        );
+
+        if count == 0 || results_ptr.is_null() {
+            return Vec::new();
+        }
+
+        let slice = std::slice::from_raw_parts(results_ptr, count);
+        let vec = slice.to_vec();
+        sys::km_free_results(results_ptr);
+        vec
     }
 }
 
@@ -365,19 +492,19 @@ impl ElfScanner {
             Self { inner: scanner }
         }
     }
-    
+
     pub fn get_program() -> Self {
         unsafe {
             let scanner = sys::km_elf_scanner_get_program();
             Self { inner: scanner }
         }
     }
-    
+
     pub fn find(path: &str) -> Option<Self> {
         unsafe {
             let c_path = CString::new(path).unwrap();
             let scanner = sys::km_elf_scanner_find(c_path.as_ptr());
-            
+
             if scanner.valid {
                 Some(Self { inner: scanner })
             } else {
@@ -385,27 +512,195 @@ impl ElfScanner {
             }
         }
     }
-    
+
     pub fn is_valid(&self) -> bool {
         self.inner.valid
     }
-    
+
     pub fn find_symbol(&self, symbol: &str) -> Option<Address> {
         if !self.is_valid() {
             return None;
         }
-        
+
         unsafe {
             let c_symbol = CString::new(symbol).unwrap();
             let result = sys::km_elf_find_symbol(
                 &self.inner as *const sys::km_elf_scanner_t as *mut sys::km_elf_scanner_t,
                 c_symbol.as_ptr(),
             );
-            
+
             if result == 0 {
                 None
             } else {
                 Some(result)
+            }
+        }
+    }
+
+    pub fn find_debug_symbol(&self, symbol: &str) -> Option<Address> {
+        if !self.is_valid() {
+            return None;
+        }
+
+        unsafe {
+            let c_symbol = CString::new(symbol).unwrap();
+            let result = sys::km_elf_find_debug_symbol(
+                &self.inner as *const sys::km_elf_scanner_t as *mut sys::km_elf_scanner_t,
+                c_symbol.as_ptr(),
+            );
+
+            if result == 0 {
+                None
+            } else {
+                Some(result)
+            }
+        }
+    }
+
+    pub fn base(&self) -> Address {
+        if !self.is_valid() {
+            return 0;
+        }
+        unsafe {
+            sys::km_elf_get_base(
+                &self.inner as *const sys::km_elf_scanner_t as *mut sys::km_elf_scanner_t,
+            )
+        }
+    }
+
+    pub fn end(&self) -> Address {
+        if !self.is_valid() {
+            return 0;
+        }
+        unsafe {
+            sys::km_elf_get_end(
+                &self.inner as *const sys::km_elf_scanner_t as *mut sys::km_elf_scanner_t,
+            )
+        }
+    }
+
+    pub fn load_bias(&self) -> Address {
+        if !self.is_valid() {
+            return 0;
+        }
+        unsafe {
+            sys::km_elf_get_load_bias(
+                &self.inner as *const sys::km_elf_scanner_t as *mut sys::km_elf_scanner_t,
+            )
+        }
+    }
+
+    pub fn load_size(&self) -> usize {
+        if !self.is_valid() {
+            return 0;
+        }
+        unsafe {
+            sys::km_elf_get_load_size(
+                &self.inner as *const sys::km_elf_scanner_t as *mut sys::km_elf_scanner_t,
+            )
+        }
+    }
+
+    pub fn path(&self) -> Option<String> {
+        if !self.is_valid() {
+            return None;
+        }
+        unsafe {
+            let c_path = sys::km_elf_get_path(
+                &self.inner as *const sys::km_elf_scanner_t as *mut sys::km_elf_scanner_t,
+            );
+            if c_path.is_null() {
+                None
+            } else {
+                let c_str = std::ffi::CStr::from_ptr(c_path);
+                Some(c_str.to_string_lossy().into_owned())
+            }
+        }
+    }
+
+    pub fn is_zipped(&self) -> bool {
+        if !self.is_valid() {
+            return false;
+        }
+        unsafe {
+            sys::km_elf_is_zipped(
+                &self.inner as *const sys::km_elf_scanner_t as *mut sys::km_elf_scanner_t,
+            )
+        }
+    }
+
+    pub fn is_native(&self) -> bool {
+        if !self.is_valid() {
+            return false;
+        }
+        unsafe {
+            sys::km_elf_is_native(
+                &self.inner as *const sys::km_elf_scanner_t as *mut sys::km_elf_scanner_t,
+            )
+        }
+    }
+
+    pub fn is_emulated(&self) -> bool {
+        if !self.is_valid() {
+            return false;
+        }
+        unsafe {
+            sys::km_elf_is_emulated(
+                &self.inner as *const sys::km_elf_scanner_t as *mut sys::km_elf_scanner_t,
+            )
+        }
+    }
+
+    pub fn dump_to_disk(&self, destination: &str) -> Result<(), &'static str> {
+        if !self.is_valid() {
+            return Err("Invalid scanner");
+        }
+        unsafe {
+            let c_dest = CString::new(destination).unwrap();
+            let result = sys::km_elf_dump_to_disk(
+                &self.inner as *const sys::km_elf_scanner_t as *mut sys::km_elf_scanner_t,
+                c_dest.as_ptr(),
+            );
+            if result {
+                Ok(())
+            } else {
+                Err("Failed to dump ELF")
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "android")]
+impl ElfScanner {
+    pub fn find_register_native(&self, name: &str, signature: &str) -> Option<RegisterNativeFn> {
+        if !self.is_valid() {
+            return None;
+        }
+
+        unsafe {
+            let c_name = CString::new(name).unwrap();
+            let c_sig = CString::new(signature).unwrap();
+            let mut result: sys::km_register_native_fn_t = std::mem::zeroed();
+
+            let success = sys::km_elf_find_register_native(
+                &self.inner as *const sys::km_elf_scanner_t as *mut sys::km_elf_scanner_t,
+                c_name.as_ptr(),
+                c_sig.as_ptr(),
+                &mut result as *mut sys::km_register_native_fn_t,
+            );
+
+            if success {
+                Some(RegisterNativeFn {
+                    name: std::ffi::CStr::from_ptr(result.name.as_ptr())
+                        .to_string_lossy()
+                        .into_owned(),
+                    signature: std::ffi::CStr::from_ptr(result.signature.as_ptr())
+                        .to_string_lossy()
+                        .into_owned(),
+                    fn_ptr: result.fnPtr,
+                })
+            } else {
+                None
             }
         }
     }
@@ -420,13 +715,438 @@ impl Drop for ElfScanner {
     }
 }
 
+#[cfg(target_os = "android")]
+#[derive(Debug, Clone)]
+pub struct RegisterNativeFn {
+    pub name: String,
+    pub signature: String,
+    pub fn_ptr: Address,
+}
+
+#[cfg(target_os = "android")]
+#[derive(Debug, Clone)]
+pub struct SoInfo {
+    pub base: Address,
+    pub size: usize,
+    pub phdr: Address,
+    pub phnum: u32,
+    pub dynamic: Address,
+    pub strtab: Address,
+    pub symtab: Address,
+    pub strsz: usize,
+    pub bias: Address,
+    pub next: Address,
+    pub e_machine: u32,
+    pub path: String,
+    pub realpath: String,
+}
+
+#[cfg(target_os = "android")]
+pub struct LinkerScanner {
+    inner: sys::km_linker_scanner_t,
+}
+
+#[cfg(target_os = "android")]
+impl LinkerScanner {
+    pub fn get() -> Self {
+        unsafe {
+            let scanner = sys::km_linker_scanner_get();
+            Self { inner: scanner }
+        }
+    }
+
+    pub fn is_valid(&self) -> bool {
+        self.inner.valid
+    }
+
+    pub fn solist(&self) -> Address {
+        unsafe {
+            sys::km_linker_solist(&self.inner as *const sys::km_linker_scanner_t as *mut sys::km_linker_scanner_t)
+        }
+    }
+
+    pub fn somain(&self) -> Address {
+        unsafe {
+            sys::km_linker_somain(&self.inner as *const sys::km_linker_scanner_t as *mut sys::km_linker_scanner_t)
+        }
+    }
+
+    pub fn sonext(&self) -> Address {
+        unsafe {
+            sys::km_linker_sonext(&self.inner as *const sys::km_linker_scanner_t as *mut sys::km_linker_scanner_t)
+        }
+    }
+
+    pub fn all_soinfo(&self) -> Vec<SoInfo> {
+        unsafe {
+            let mut infos_ptr: *mut sys::km_soinfo_t = std::ptr::null_mut();
+            let count = sys::km_linker_all_soinfo(
+                &self.inner as *const sys::km_linker_scanner_t as *mut sys::km_linker_scanner_t,
+                &mut infos_ptr as *mut *mut sys::km_soinfo_t,
+            );
+
+            if count == 0 || infos_ptr.is_null() {
+                return Vec::new();
+            }
+
+            let slice = std::slice::from_raw_parts(infos_ptr, count);
+            let vec: Vec<SoInfo> = slice
+                .iter()
+                .map(|si| SoInfo {
+                    base: si.base,
+                    size: si.size,
+                    phdr: si.phdr,
+                    phnum: si.phnum,
+                    dynamic: si.r#dyn,
+                    strtab: si.strtab,
+                    symtab: si.symtab,
+                    strsz: si.strsz,
+                    bias: si.bias,
+                    next: si.next,
+                    e_machine: si.e_machine,
+                    path: std::ffi::CStr::from_ptr(si.path.as_ptr())
+                        .to_string_lossy()
+                        .into_owned(),
+                    realpath: std::ffi::CStr::from_ptr(si.realpath.as_ptr())
+                        .to_string_lossy()
+                        .into_owned(),
+                })
+                .collect();
+
+            sys::km_free_soinfos(infos_ptr);
+            vec
+        }
+    }
+
+    pub fn find_soinfo(&self, name: &str) -> Option<SoInfo> {
+        unsafe {
+            let c_name = CString::new(name).unwrap();
+            let mut info: sys::km_soinfo_t = std::mem::zeroed();
+
+            let success = sys::km_linker_find_soinfo(
+                &self.inner as *const sys::km_linker_scanner_t as *mut sys::km_linker_scanner_t,
+                c_name.as_ptr(),
+                &mut info as *mut sys::km_soinfo_t,
+            );
+
+            if success {
+                Some(SoInfo {
+                    base: info.base,
+                    size: info.size,
+                    phdr: info.phdr,
+                    phnum: info.phnum,
+                    dynamic: info.r#dyn,
+                    strtab: info.strtab,
+                    symtab: info.symtab,
+                    strsz: info.strsz,
+                    bias: info.bias,
+                    next: info.next,
+                    e_machine: info.e_machine,
+                    path: std::ffi::CStr::from_ptr(info.path.as_ptr())
+                        .to_string_lossy()
+                        .into_owned(),
+                    realpath: std::ffi::CStr::from_ptr(info.realpath.as_ptr())
+                        .to_string_lossy()
+                        .into_owned(),
+                })
+            } else {
+                None
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "android")]
+impl Drop for LinkerScanner {
+    fn drop(&mut self) {
+        unsafe {
+            sys::km_linker_scanner_free(&mut self.inner as *mut sys::km_linker_scanner_t);
+        }
+    }
+}
+
+#[cfg(target_os = "android")]
+#[derive(Debug, Clone)]
+pub struct ProcMap {
+    pub start_address: Address,
+    pub end_address: Address,
+    pub length: usize,
+    pub protection: String,
+    pub readable: bool,
+    pub writeable: bool,
+    pub executable: bool,
+    pub is_private: bool,
+    pub is_shared: bool,
+    pub offset: usize,
+    pub dev: String,
+    pub inode: u64,
+    pub pathname: String,
+}
+
+#[cfg(target_os = "android")]
+#[repr(i32)]
+pub enum ProcMapFilter {
+    Equal = 0,
+    Contains = 1,
+    StartWith = 2,
+    EndWith = 3,
+}
+
+#[cfg(target_os = "android")]
+pub fn get_all_maps() -> Vec<ProcMap> {
+    unsafe {
+        let mut maps_ptr: *mut sys::km_proc_map_t = std::ptr::null_mut();
+        let count = sys::km_get_all_maps(&mut maps_ptr as *mut *mut sys::km_proc_map_t);
+
+        if count == 0 || maps_ptr.is_null() {
+            return Vec::new();
+        }
+
+        let slice = std::slice::from_raw_parts(maps_ptr, count);
+        let vec: Vec<ProcMap> = slice
+            .iter()
+            .map(|m| ProcMap {
+                start_address: m.startAddress,
+                end_address: m.endAddress,
+                length: m.length,
+                protection: std::ffi::CStr::from_ptr(m.protection.as_ptr())
+                    .to_string_lossy()
+                    .into_owned(),
+                readable: m.readable,
+                writeable: m.writeable,
+                executable: m.executable,
+                is_private: m.is_private,
+                is_shared: m.is_shared,
+                offset: m.offset,
+                dev: std::ffi::CStr::from_ptr(m.dev.as_ptr())
+                    .to_string_lossy()
+                    .into_owned(),
+                inode: m.inode,
+                pathname: std::ffi::CStr::from_ptr(m.pathname.as_ptr())
+                    .to_string_lossy()
+                    .into_owned(),
+            })
+            .collect();
+
+        sys::km_free_maps(maps_ptr);
+        vec
+    }
+}
+
+#[cfg(target_os = "android")]
+pub fn get_maps_filtered(name: &str, filter: ProcMapFilter) -> Vec<ProcMap> {
+    unsafe {
+        let c_name = CString::new(name).unwrap();
+        let mut maps_ptr: *mut sys::km_proc_map_t = std::ptr::null_mut();
+        let count = sys::km_get_maps_filtered(
+            c_name.as_ptr(),
+            filter as i32,
+            &mut maps_ptr as *mut *mut sys::km_proc_map_t,
+        );
+
+        if count == 0 || maps_ptr.is_null() {
+            return Vec::new();
+        }
+
+        let slice = std::slice::from_raw_parts(maps_ptr, count);
+        let vec: Vec<ProcMap> = slice
+            .iter()
+            .map(|m| ProcMap {
+                start_address: m.startAddress,
+                end_address: m.endAddress,
+                length: m.length,
+                protection: std::ffi::CStr::from_ptr(m.protection.as_ptr())
+                    .to_string_lossy()
+                    .into_owned(),
+                readable: m.readable,
+                writeable: m.writeable,
+                executable: m.executable,
+                is_private: m.is_private,
+                is_shared: m.is_shared,
+                offset: m.offset,
+                dev: std::ffi::CStr::from_ptr(m.dev.as_ptr())
+                    .to_string_lossy()
+                    .into_owned(),
+                inode: m.inode,
+                pathname: std::ffi::CStr::from_ptr(m.pathname.as_ptr())
+                    .to_string_lossy()
+                    .into_owned(),
+            })
+            .collect();
+
+        sys::km_free_maps(maps_ptr);
+        vec
+    }
+}
+
+#[cfg(target_os = "android")]
+pub fn get_address_map(address: Address) -> Option<ProcMap> {
+    unsafe {
+        let mut map: sys::km_proc_map_t = std::mem::zeroed();
+        let result = sys::km_get_address_map(address, &mut map as *mut sys::km_proc_map_t);
+
+        if result {
+            Some(ProcMap {
+                start_address: map.startAddress,
+                end_address: map.endAddress,
+                length: map.length,
+                protection: std::ffi::CStr::from_ptr(map.protection.as_ptr())
+                    .to_string_lossy()
+                    .into_owned(),
+                readable: map.readable,
+                writeable: map.writeable,
+                executable: map.executable,
+                is_private: map.is_private,
+                is_shared: map.is_shared,
+                offset: map.offset,
+                dev: std::ffi::CStr::from_ptr(map.dev.as_ptr())
+                    .to_string_lossy()
+                    .into_owned(),
+                inode: map.inode,
+                pathname: std::ffi::CStr::from_ptr(map.pathname.as_ptr())
+                    .to_string_lossy()
+                    .into_owned(),
+            })
+        } else {
+            None
+        }
+    }
+}
+
+#[cfg(target_os = "ios")]
+#[derive(Debug, Clone)]
+pub struct SegmentData {
+    pub start: Address,
+    pub end: Address,
+    pub size: usize,
+}
+
+#[cfg(target_os = "ios")]
+pub struct MemoryFileInfo {
+    inner: sys::km_memory_file_info_t,
+}
+
+#[cfg(target_os = "ios")]
+impl MemoryFileInfo {
+    pub fn get_base_info() -> Self {
+        unsafe {
+            let info = sys::km_get_base_info();
+            Self { inner: info }
+        }
+    }
+
+    pub fn get_file_info(file_name: &str) -> Option<Self> {
+        unsafe {
+            let c_name = CString::new(file_name).unwrap();
+            let info = sys::km_get_memory_file_info(c_name.as_ptr());
+
+            if info.handle.is_null() {
+                None
+            } else {
+                Some(Self { inner: info })
+            }
+        }
+    }
+
+    pub fn index(&self) -> u32 {
+        self.inner.index
+    }
+
+    pub fn name(&self) -> &str {
+        unsafe {
+            if self.inner.name.is_null() {
+                ""
+            } else {
+                std::ffi::CStr::from_ptr(self.inner.name)
+                    .to_str()
+                    .unwrap_or("")
+            }
+        }
+    }
+
+    pub fn address(&self) -> Address {
+        self.inner.address as Address
+    }
+
+    pub fn get_segment(&self, seg_name: &str) -> SegmentData {
+        unsafe {
+            let c_seg = CString::new(seg_name).unwrap();
+            let seg = sys::km_get_segment(
+                &self.inner as *const sys::km_memory_file_info_t as *mut sys::km_memory_file_info_t,
+                c_seg.as_ptr(),
+            );
+
+            SegmentData {
+                start: seg.start,
+                end: seg.end,
+                size: seg.size,
+            }
+        }
+    }
+
+    pub fn get_section(&self, seg_name: &str, sect_name: &str) -> SegmentData {
+        unsafe {
+            let c_seg = CString::new(seg_name).unwrap();
+            let c_sect = CString::new(sect_name).unwrap();
+            let sect = sys::km_get_section(
+                &self.inner as *const sys::km_memory_file_info_t as *mut sys::km_memory_file_info_t,
+                c_seg.as_ptr(),
+                c_sect.as_ptr(),
+            );
+
+            SegmentData {
+                start: sect.start,
+                end: sect.end,
+                size: sect.size,
+            }
+        }
+    }
+
+    pub fn find_symbol(&self, symbol: &str) -> Option<Address> {
+        unsafe {
+            let c_symbol = CString::new(symbol).unwrap();
+            let result = sys::km_find_symbol_in_file(
+                &self.inner as *const sys::km_memory_file_info_t as *mut sys::km_memory_file_info_t,
+                c_symbol.as_ptr(),
+            );
+
+            if result == 0 {
+                None
+            } else {
+                Some(result)
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "ios")]
+impl Drop for MemoryFileInfo {
+    fn drop(&mut self) {
+        unsafe {
+            sys::km_free_memory_file_info(&mut self.inner as *mut sys::km_memory_file_info_t);
+        }
+    }
+}
+
+#[cfg(target_os = "ios")]
+pub fn get_absolute_address(file_name: Option<&str>, address: Address) -> Address {
+    unsafe {
+        if let Some(name) = file_name {
+            let c_name = CString::new(name).unwrap();
+            sys::km_get_absolute_address(c_name.as_ptr(), address)
+        } else {
+            sys::km_get_absolute_address(std::ptr::null(), address)
+        }
+    }
+}
+
 #[cfg(target_os = "ios")]
 pub fn find_symbol_in_lib(lib: &str, symbol: &str) -> Option<Address> {
     unsafe {
         let c_lib = CString::new(lib).unwrap();
         let c_symbol = CString::new(symbol).unwrap();
         let result = sys::km_find_symbol_in_lib(c_lib.as_ptr(), c_symbol.as_ptr());
-        
+
         if result == 0 {
             None
         } else {
@@ -495,4 +1215,56 @@ pub fn page_start(x: Address) -> Address {
 
 pub fn page_end(x: Address) -> Address {
     sys::km_page_end_fn(x)
+}
+
+pub fn data_to_hex(data: &[u8]) -> String {
+    unsafe {
+        let hex_ptr = sys::km_data_to_hex(data.as_ptr() as *const std::ffi::c_void, data.len());
+        if hex_ptr.is_null() {
+            return String::new();
+        }
+        let c_str = std::ffi::CStr::from_ptr(hex_ptr);
+        let result = c_str.to_string_lossy().into_owned();
+        sys::km_free_string(hex_ptr);
+        result
+    }
+}
+
+pub fn hex_to_data(hex: &str) -> Result<Vec<u8>, &'static str> {
+    let hex_clean = hex.replace(" ", "").replace("0x", "");
+
+    if hex_clean.len() % 2 != 0 {
+        return Err("Hex string must have even length");
+    }
+
+    let data_len = hex_clean.len() / 2;
+    let mut data = vec![0u8; data_len];
+
+    unsafe {
+        let c_hex = CString::new(hex_clean).unwrap();
+        let success = sys::km_hex_to_data(
+            c_hex.as_ptr(),
+            data.as_mut_ptr() as *mut std::ffi::c_void,
+            data_len,
+        );
+
+        if success {
+            Ok(data)
+        } else {
+            Err("Invalid hex string")
+        }
+    }
+}
+
+pub fn hex_dump(address: Address, len: usize) -> String {
+    unsafe {
+        let dump_ptr = sys::km_hex_dump(address as *const std::ffi::c_void, len);
+        if dump_ptr.is_null() {
+            return String::new();
+        }
+        let c_str = std::ffi::CStr::from_ptr(dump_ptr);
+        let result = c_str.to_string_lossy().into_owned();
+        sys::km_free_string(dump_ptr);
+        result
+    }
 }

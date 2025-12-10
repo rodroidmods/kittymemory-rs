@@ -1,6 +1,6 @@
 [package]
 name = "kittymemory-rs"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Rodroid Dev"]
 description = "Rust bindings for KittyMemory - A memory manipulation library for Android and iOS"
@@ -26,11 +26,7 @@ ios = []
 [lib]
 name = "kittymemory"
 path = "src/lib.rs"
-crate-type = ["staticlib", "cdylib"]
-readme = "README.md"
-
-# Exclude large or unnecessary files from the published crate to keep payload < 10MB.
-# Adjust as needed — avoid shipping large vendor binaries or build artifacts.
+# crate-type = ["staticlib", "cdylib"]
 
 [profile.release]
 opt-level = "z"

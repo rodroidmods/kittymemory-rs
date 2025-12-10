@@ -198,6 +198,8 @@ fn main() {
         println!("cargo:rustc-link-lib=framework=Foundation");
     }
 
+    build.flag_if_supported("-Wno-return-type");
+
     build.compile("kittymemory");
 
     let bindings = bindgen::Builder::default()

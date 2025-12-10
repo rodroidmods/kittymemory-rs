@@ -1,29 +1,57 @@
 # kittymemory-rs
 
-Advanced Rust bindings for [KittyMemory](https://github.com/MJx0/KittyMemory) — a memory manipulation library for Android and iOS.
+Production-ready Rust bindings for [KittyMemory](https://github.com/MJx0/KittyMemory) — a comprehensive memory manipulation library for Android and iOS.
 
-## Highlights
+## Features
 
-- Automatic FFI binding generation with `bindgen`
-- Safe Rust wrappers for common operations (`safe` module)
-- Low-level FFI surface in `sys` for direct calls
-- Memory read/write, patching, backup, pattern scanning, symbol lookup and pointer validation
+### Core Functionality
+- **Memory Operations**: Read, write, and protect memory with automatic permission handling
+- **Memory Patching**: Create patches from bytes, hex strings, or assembly code (with Keystone)
+- **Memory Backup**: Save and restore memory regions
+- **Pattern Scanning**: Find byte patterns, hex patterns, IDA-style patterns, or arbitrary data
+- **Pointer Validation**: Verify if pointers are readable, writable, or executable
 
-## Quick Architecture
+### Android-Specific Features
+- **ELF Scanner**: Comprehensive ELF analysis with symbol lookup, debug symbols, and metadata
+- **LinkerScanner**: Access Android linker internals and enumerate all loaded libraries
+- **Process Maps**: Parse and filter /proc/self/maps entries
+- **RegisterNativeFn**: Find JNI native method registrations by name and signature
+- **SoInfo Access**: Get detailed information about loaded shared objects
 
-- `sys` — raw, bindgen-generated FFI bindings (unsafe)
-- `safe` — ergonomic wrappers built on top of `sys` (safe where possible)
+### iOS-Specific Features
+- **MemoryFileInfo**: Access Mach-O binary information for dylibs and frameworks
+- **Segment/Section Access**: Query __TEXT, __DATA and other segments/sections
+- **Symbol Lookup**: Find symbols in specific files or libraries
+- **Address Translation**: Convert relative offsets to absolute addresses
+
+### Utility Functions
+- **Hex Conversion**: Convert between bytes and hex strings
+- **Hex Dump**: Format memory dumps with ASCII representation
+- **Page Helpers**: Calculate page-aligned addresses
+
+## Architecture
+
+- **`sys`**: Raw FFI bindings (auto-generated with bindgen)
+- **`safe`**: Safe Rust wrappers with RAII and error handling
+- **`prelude`**: Convenient imports for common use cases
 
 ## Installation
 
-Add to your `Cargo.toml` (local or Git):
+Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-kittymemory = { path = "path/to/kittymemory-rs" }
+kittymemory = "0.2"
 ```
 
-Or use the Git source:
+With Keystone assembler support:
+
+```toml
+[dependencies]
+kittymemory = { version = "0.2", features = ["keystone"] }
+```
+
+Or from GitHub:
 
 ```toml
 [dependencies]
@@ -35,113 +63,164 @@ kittymemory = { git = "https://github.com/rodroidmods/kittymemory-rs", branch = 
 - Rust 1.70+
 - C++ compiler (g++/clang++)
 - `libclang` (for bindgen)
-- Android NDK (for Android target builds)
-- Xcode toolchain (for iOS target builds)
+- Android NDK (for Android targets)
+- Xcode (for iOS targets)
 
-## Basic Usage
+## Quick Examples
 
-Use the provided `safe` wrappers for most tasks; use `sys` for raw FFI when you need full control.
-
-Read a typed value:
+### Memory Operations
 
 ```rust
 use kittymemory::prelude::*;
 
-let addr: Address = 0x1234_5678;
-let value: i32 = mem_read(addr).expect("read failed");
-println!("value = {}", value);
+let addr = 0x12345678;
+let value: i32 = mem_read(addr)?;
+mem_write(addr, &42i32)?;
 ```
 
-Write memory (Android):
+### Memory Patching
 
 ```rust
 use kittymemory::prelude::*;
 
-let v: i32 = 42;
-mem_write(addr, &v).expect("write failed");
+let mut patch = Patch::with_hex(0x1000, "90 90 90 90")?;
+patch.modify()?;
+patch.restore()?;
 ```
 
-Apply a patch:
+With assembly (requires `keystone` feature):
+
+```rust
+let mut patch = Patch::with_asm(
+    0x1000,
+    AsmArch::ARM64,
+    "mov x0, #42\nret",
+    0x1000
+)?;
+patch.modify()?;
+```
+
+### Pattern Scanning
 
 ```rust
 use kittymemory::prelude::*;
 
-let mut patch = Patch::with_hex(addr, "90 90 90 90").expect("bad hex");
-if patch.is_valid() {
-    patch.modify().expect("apply failed");
-    // ...later
-    patch.restore().expect("restore failed");
+if let Some(addr) = find_pattern_first(0x10000000, 0x20000000, "48 8B ? ? 48 89") {
+    println!("Found at {:#x}", addr);
+}
+
+let all_matches = find_hex_all(0x10000000, 0x20000000, "DEADBEEF", "xxxxxxxx");
+for addr in all_matches {
+    println!("Match at {:#x}", addr);
 }
 ```
 
-Pattern scan:
+### Android: ELF Scanner
+
+```rust
+#[cfg(target_os = "android")]
+use kittymemory::prelude::*;
+
+let elf = ElfScanner::find("libil2cpp.so").expect("Library not found");
+if let Some(addr) = elf.find_symbol("il2cpp_init") {
+    println!("il2cpp_init at {:#x}", addr);
+}
+
+println!("Base: {:#x}", elf.base());
+println!("Size: {:#x}", elf.load_size());
+println!("Native: {}", elf.is_native());
+```
+
+### Android: LinkerScanner
+
+```rust
+#[cfg(target_os = "android")]
+use kittymemory::prelude::*;
+
+let linker = LinkerScanner::get();
+for lib in linker.all_soinfo() {
+    println!("{}: base={:#x} size={:#x}", lib.path, lib.base, lib.size);
+}
+
+if let Some(info) = linker.find_soinfo("libc.so") {
+    println!("libc base: {:#x}", info.base);
+}
+```
+
+### Android: Process Maps
+
+```rust
+#[cfg(target_os = "android")]
+use kittymemory::prelude::*;
+
+let maps = get_all_maps();
+for map in maps {
+    println!("{:#x}-{:#x} {} {}",
+        map.start_address, map.end_address, map.protection, map.pathname);
+}
+
+let lib_maps = get_maps_filtered("libunity.so", ProcMapFilter::Contains);
+```
+
+### iOS: MemoryFileInfo
+
+```rust
+#[cfg(target_os = "ios")]
+use kittymemory::prelude::*;
+
+let base = MemoryFileInfo::get_base_info();
+println!("Base executable: {}", base.name());
+
+if let Some(lib) = MemoryFileInfo::get_file_info("libSystem.dylib") {
+    let text = lib.get_segment("__TEXT");
+    println!("__TEXT: {:#x}-{:#x}", text.start, text.end);
+
+    if let Some(addr) = lib.find_symbol("_malloc") {
+        println!("malloc at {:#x}", addr);
+    }
+}
+```
+
+### Utility Functions
 
 ```rust
 use kittymemory::prelude::*;
 
-if let Some(p) = find_pattern_first(0x1000_0000, 0x2000_0000, "48 8B ? ? 48 89") {
-    println!("found at {:#x}", p);
-}
-```
+let data = vec![0xDE, 0xAD, 0xBE, 0xEF];
+let hex = data_to_hex(&data);
+println!("Hex: {}", hex);
 
-Pointer validation:
+let bytes = hex_to_data("DEADBEEF")?;
 
-```rust
-use kittymemory::prelude::*;
-
-let mut v = PtrValidator::new();
-v.set_use_cache(true);
-println!("readable: {}", v.is_ptr_readable(0x1000, 4));
-```
-
-If you prefer raw FFI, import `sys` directly:
-
-```rust
-use kittymemory::sys;
-unsafe {
-    let mut x: i32 = 0;
-    sys::km_mem_read(0x1000 as *const _, &mut x as *mut _ as *mut _, 4);
-}
+let dump = hex_dump(0x1000, 64);
+println!("{}", dump);
 ```
 
 ## Building
 
-### Local development (host)
+### Desktop (Development)
 
 ```bash
 cargo build
 ```
 
-### Android (recommended via `cargo-ndk`)
-
-Install `cargo-ndk` and build for `arm64`:
+### Android
 
 ```bash
 cargo install cargo-ndk
-cargo ndk -t arm64-v8a build --release --features keystone
+cargo ndk -t arm64-v8a build --release
 ```
 
-Alternative (manual NDK target):
-
-```bash
-rustup target add aarch64-linux-android
-cargo build --target aarch64-linux-android --features android --release
-```
-
-### iOS (cross-build)
+### iOS
 
 ```bash
 rustup target add aarch64-apple-ios
-cargo build --target aarch64-apple-ios --features ios --release
+cargo build --target aarch64-apple-ios --release
 ```
-
-Notes:
-- `build.rs` compiles the C++ sources and runs `bindgen` during the build. The builder host needs `libclang` and a working C++ toolchain.
-- The `keystone` feature requires Keystone static libraries for the target platform (see `KittyMemory/Deps/Keystone`).
 
 ## Examples
 
-Run the low-level FFI example (requires successful native build):
+Run the comprehensive example:
 
 ```bash
 cargo run --example usage
@@ -149,25 +228,36 @@ cargo run --example usage
 
 ## Documentation
 
+Generate and open the documentation:
+
 ```bash
 cargo doc --open
 ```
 
+## Feature Flags
+
+- **`keystone`**: Enable assembly patching with Keystone assembler
+- **`android`**: Android-specific features (auto-detected)
+- **`ios`**: iOS-specific features (auto-detected)
+
 ## Safety
 
-- `safe` provides ergonomic, safer wrappers; prefer it when possible.
-- `sys` is raw FFI and `unsafe` — you must manage ownership and free C allocations where required (use `km_patch_free`, `km_backup_free`, etc.).
+- **`safe` module**: RAII wrappers with automatic cleanup and error handling
+- **`sys` module**: Raw FFI - requires manual memory management and `unsafe` blocks
 
-## Platform Notes
+## Platform Support Matrix
 
-- Android: ELF parsing, process map enumeration, memory protection APIs.
-- iOS: Mach-O symbol lookup and detailed memory status codes.
-
-## How It Works
-
-1. `wrapper.cpp` / `wrapper.h` expose C++ APIs as C functions.
-2. `build.rs` compiles the native sources and runs `bindgen` to generate `bindings.rs`.
-3. `src/safe.rs` adds Rust-friendly wrappers on top of `sys`.
+| Feature | Android | iOS | Cross-Platform |
+|---------|---------|-----|----------------|
+| Memory R/W | ✅ | ✅ | ✅ |
+| Patching | ✅ | ✅ | ✅ |
+| Pattern Scanning | ✅ | ✅ | ✅ |
+| ELF Analysis | ✅ | N/A | - |
+| Mach-O Analysis | N/A | ✅ | - |
+| LinkerScanner | ✅ | N/A | - |
+| Process Maps | ✅ | N/A | - |
+| JNI Support | ✅ | N/A | - |
+| Pointer Validation | ✅ | ✅ | ✅ |
 
 ## License
 
@@ -176,14 +266,15 @@ MIT
 ## Credits
 
 - **Original Library**: [KittyMemory](https://github.com/MJx0/KittyMemory) by MJx0
-- **Rust Bindings / Maintenance**: Rodroid Dev
-- **Telegram Group**: https://t.me/+QylrYL1GNsJiYjc0
-- **Telegram Channel**: https://t.me/+WmudnO0-xoNhMDQ8
+- **Rust Bindings**: Rodroid Dev
+- **Community**:
+  - Telegram Group: https://t.me/+QylrYL1GNsJiYjc0
+  - Telegram Channel: https://t.me/+WmudnO0-xoNhMDQ8
 
 ## Contributing
 
-Contributions welcome — open issues or submit pull requests.
+Contributions welcome! Open issues or submit pull requests.
 
 ## Disclaimer
 
-Intended for education, research and legitimate modding only. Comply with laws and platform terms.
+Intended for education, research, and legitimate reverse engineering only. Users are responsible for compliance with applicable laws and platform terms.
