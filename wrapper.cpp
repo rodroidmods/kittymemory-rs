@@ -14,6 +14,16 @@ static std::unordered_map<uintptr_t, MemoryPatch> g_patches;
 static std::unordered_map<uintptr_t, MemoryBackup> g_backups;
 static std::mutex g_patches_mutex;
 static std::mutex g_backups_mutex;
+
+#ifdef __ANDROID__
+static void protection_to_string(int prot, char* out) {
+    out[0] = (prot & PROT_READ) ? 'r' : '-';
+    out[1] = (prot & PROT_WRITE) ? 'w' : '-';
+    out[2] = (prot & PROT_EXEC) ? 'x' : '-';
+    out[3] = '\0';
+}
+#endif
+
 static uintptr_t g_next_patch_id = 1;
 static uintptr_t g_next_backup_id = 1;
 
@@ -410,8 +420,7 @@ size_t km_get_all_maps(km_proc_map_t** maps) {
         (*maps)[i].startAddress = pm.startAddress;
         (*maps)[i].endAddress = pm.endAddress;
         (*maps)[i].length = pm.length;
-        strncpy((*maps)[i].protection, pm.protection.c_str(), 4);
-        (*maps)[i].protection[4] = '\0';
+        protection_to_string(pm.protection, (*maps)[i].protection);
         (*maps)[i].readable = pm.readable;
         (*maps)[i].writeable = pm.writeable;
         (*maps)[i].executable = pm.executable;
@@ -447,8 +456,7 @@ size_t km_get_maps_filtered(const char* name, int filter, km_proc_map_t** maps) 
         (*maps)[i].startAddress = pm.startAddress;
         (*maps)[i].endAddress = pm.endAddress;
         (*maps)[i].length = pm.length;
-        strncpy((*maps)[i].protection, pm.protection.c_str(), 4);
-        (*maps)[i].protection[4] = '\0';
+        protection_to_string(pm.protection, (*maps)[i].protection);
         (*maps)[i].readable = pm.readable;
         (*maps)[i].writeable = pm.writeable;
         (*maps)[i].executable = pm.executable;
@@ -474,8 +482,7 @@ bool km_get_address_map(uintptr_t address, km_proc_map_t* map) {
     map->startAddress = pm.startAddress;
     map->endAddress = pm.endAddress;
     map->length = pm.length;
-    strncpy(map->protection, pm.protection.c_str(), 4);
-    map->protection[4] = '\0';
+    protection_to_string(pm.protection, map->protection);
     map->readable = pm.readable;
     map->writeable = pm.writeable;
     map->executable = pm.executable;
@@ -501,13 +508,13 @@ bool km_elf_find_register_native(km_elf_scanner_t* scanner, const char* name, co
     KittyScanner::ElfScanner* elf = (KittyScanner::ElfScanner*)scanner->handle;
     KittyScanner::RegisterNativeFn fn = elf->findRegisterNativeFn(std::string(name), std::string(signature));
 
-    if (fn.fnPtr == 0) return false;
+    if (fn.fnPtr == nullptr) return false;
 
-    strncpy(result->name, fn.name.c_str(), 127);
+    strncpy(result->name, fn.name ? fn.name : "", 127);
     result->name[127] = '\0';
-    strncpy(result->signature, fn.signature.c_str(), 255);
+    strncpy(result->signature, fn.signature ? fn.signature : "", 255);
     result->signature[255] = '\0';
-    result->fnPtr = fn.fnPtr;
+    result->fnPtr = (uintptr_t)fn.fnPtr;
 
     return true;
 }
