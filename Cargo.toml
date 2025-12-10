@@ -1,6 +1,6 @@
 [package]
 name = "kittymemory-rs"
-version = "0.2.4"
+version = "0.2.5"
 edition = "2021"
 authors = ["Rodroid Dev"]
 description = "Rust bindings for KittyMemory - A memory manipulation library for Android and iOS"
