@@ -2,6 +2,8 @@
 
 Production-ready Rust bindings for [KittyMemory](https://github.com/MJx0/KittyMemory) — a comprehensive memory manipulation library for Android and iOS.
 
+> **⚠️ Important**: Use version **0.2.5 or higher**. Earlier versions (0.2.0-0.2.4) contain compilation issues for Android targets. Version 0.2.5+ is the official stable release.
+
 ## Features
 
 ### Core Functionality
@@ -41,7 +43,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-kittymemory-rs = "0.2"
+kittymemory-rs = "0.2.5"  # or "0.2" to auto-update to latest 0.2.x
 ```
 
 With Keystone assembler support:
