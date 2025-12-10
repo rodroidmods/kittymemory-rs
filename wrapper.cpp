@@ -396,7 +396,7 @@ bool km_elf_dump_to_disk(km_elf_scanner_t* scanner, const char* destination) {
 }
 
 size_t km_get_all_maps(km_proc_map_t** maps) {
-    std::vector<ProcMap> all_maps = KittyMemory::getAllMaps();
+    std::vector<KittyMemory::ProcMap> all_maps = KittyMemory::getAllMaps();
     if (all_maps.empty()) {
         *maps = nullptr;
         return 0;
@@ -429,8 +429,8 @@ size_t km_get_all_maps(km_proc_map_t** maps) {
 }
 
 size_t km_get_maps_filtered(const char* name, int filter, km_proc_map_t** maps) {
-    std::vector<ProcMap> filtered_maps = KittyMemory::getMaps(
-        static_cast<EProcMapFilter>(filter),
+    std::vector<KittyMemory::ProcMap> filtered_maps = KittyMemory::getMaps(
+        static_cast<KittyMemory::EProcMapFilter>(filter),
         std::string(name)
     );
 
@@ -468,7 +468,7 @@ size_t km_get_maps_filtered(const char* name, int filter, km_proc_map_t** maps) 
 bool km_get_address_map(uintptr_t address, km_proc_map_t* map) {
     if (!map) return false;
 
-    ProcMap pm = KittyMemory::getAddressMap((const void*)address);
+    KittyMemory::ProcMap pm = KittyMemory::getAddressMap((const void*)address);
     if (!pm.isValid()) return false;
 
     map->startAddress = pm.startAddress;
@@ -499,7 +499,7 @@ bool km_elf_find_register_native(km_elf_scanner_t* scanner, const char* name, co
     if (!scanner || !scanner->valid || !scanner->handle || !result) return false;
 
     KittyScanner::ElfScanner* elf = (KittyScanner::ElfScanner*)scanner->handle;
-    RegisterNativeFn fn = elf->findRegisterNativeFn(std::string(name), std::string(signature));
+    KittyScanner::RegisterNativeFn fn = elf->findRegisterNativeFn(std::string(name), std::string(signature));
 
     if (fn.fnPtr == 0) return false;
 
@@ -545,7 +545,7 @@ size_t km_linker_all_soinfo(km_linker_scanner_t* scanner, km_soinfo_t** infos) {
     }
 
     KittyScanner::LinkerScanner* linker = (KittyScanner::LinkerScanner*)scanner->handle;
-    std::vector<kitty_soinfo_t> all_info = linker->allSoInfo();
+    std::vector<KittyScanner::kitty_soinfo_t> all_info = linker->allSoInfo();
 
     if (all_info.empty()) {
         *infos = nullptr;
@@ -581,7 +581,7 @@ bool km_linker_find_soinfo(km_linker_scanner_t* scanner, const char* name, km_so
     if (!scanner || !scanner->valid || !scanner->handle || !info) return false;
 
     KittyScanner::LinkerScanner* linker = (KittyScanner::LinkerScanner*)scanner->handle;
-    kitty_soinfo_t si = linker->findSoInfo(std::string(name));
+    KittyScanner::kitty_soinfo_t si = linker->findSoInfo(std::string(name));
 
     if (si.base == 0) return false;
 
