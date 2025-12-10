@@ -212,7 +212,7 @@ impl Patch {
             let c_asm = CString::new(asm_code).unwrap();
             let patch = sys::km_patch_create_asm(
                 address,
-                arch as i32,
+                arch as u32,
                 c_asm.as_ptr(),
                 asm_address,
             );
