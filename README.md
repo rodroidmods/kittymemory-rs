@@ -41,14 +41,14 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-kittymemory = "0.2"
+kittymemory-rs = "0.2"
 ```
 
 With Keystone assembler support:
 
 ```toml
 [dependencies]
-kittymemory = { version = "0.2", features = ["keystone"] }
+kittymemory-rs = { version = "0.2", features = ["keystone"] }
 ```
 
 Or from GitHub:
@@ -71,7 +71,7 @@ kittymemory = { git = "https://github.com/rodroidmods/kittymemory-rs", branch = 
 ### Memory Operations
 
 ```rust
-use kittymemory::prelude::*;
+use kittymemory_rs::prelude::*;
 
 let addr = 0x12345678;
 let value: i32 = mem_read(addr)?;
@@ -81,7 +81,7 @@ mem_write(addr, &42i32)?;
 ### Memory Patching
 
 ```rust
-use kittymemory::prelude::*;
+use kittymemory_rs::prelude::*;
 
 let mut patch = Patch::with_hex(0x1000, "90 90 90 90")?;
 patch.modify()?;
@@ -103,7 +103,7 @@ patch.modify()?;
 ### Pattern Scanning
 
 ```rust
-use kittymemory::prelude::*;
+use kittymemory_rs::prelude::*;
 
 if let Some(addr) = find_pattern_first(0x10000000, 0x20000000, "48 8B ? ? 48 89") {
     println!("Found at {:#x}", addr);
@@ -184,7 +184,7 @@ if let Some(lib) = MemoryFileInfo::get_file_info("libSystem.dylib") {
 ### Utility Functions
 
 ```rust
-use kittymemory::prelude::*;
+use kittymemory_rs::prelude::*;
 
 let data = vec![0xDE, 0xAD, 0xBE, 0xEF];
 let hex = data_to_hex(&data);

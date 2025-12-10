@@ -1,6 +1,6 @@
 [package]
 name = "kittymemory-rs"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["Rodroid Dev"]
 description = "Rust bindings for KittyMemory - A memory manipulation library for Android and iOS"
@@ -27,6 +27,11 @@ ios = []
 name = "kittymemory"
 path = "src/lib.rs"
 # crate-type = ["staticlib", "cdylib"]
+
+[package.metadata.docs.rs]
+default-target = "x86_64-unknown-linux-gnu"
+targets = []
+rustdoc-args = ["--cfg", "docsrs"]
 
 [profile.release]
 opt-level = "z"
