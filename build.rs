@@ -100,7 +100,7 @@ fn main() {
                     ("android", "arm") => base.join("libs-android/armeabi-v7a"),
                     ("android", "x86") => base.join("libs-android/x86"),
                     ("android", "x86_64") => base.join("libs-android/x86_64"),
-                    ("ios", _) => base.join("libs-ios"),
+                    ("ios", "aarch64") => base.join("libs-ios/arm64"),
                     _ => base.join("libs"),
                 };
 
@@ -113,6 +113,7 @@ fn main() {
                     ("android", "arm") => base.join("libs/Android/armeabi-v7a"),
                     ("android", "x86") => base.join("libs/Android/x86"),
                     ("android", "x86_64") => base.join("libs/Android/x86_64"),
+                    ("ios", "aarch64") => base.join("libs-ios/arm64e"),
                     _ => base.join("libs"),
                 };
                 if alt.exists() {
