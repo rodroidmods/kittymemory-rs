@@ -35,16 +35,21 @@ fn main() {
         let dest = out_dir.join("KittyMemory");
         if !dest.exists() {
             println!("cargo:warning=Cloning KittyMemory into {}", dest.display());
+            // Clone without --depth 1 to ensure submodules work properly
             let status = Command::new("git")
-                .args(&["clone", "--depth", "1", "https://github.com/MJx0/KittyMemory", dest.to_str().unwrap()])
+                .args(&["clone", "--recursive", "https://github.com/MJx0/KittyMemory", dest.to_str().unwrap()])
                 .status()
                 .expect("Failed to spawn git - ensure `git` is installed and in PATH");
             if !status.success() {
                 panic!("git clone failed with status: {}", status);
             }
+            println!("cargo:warning=Cloned KittyMemory with submodules");
+        } else {
+            // If dest exists, ensure submodules are initialized
+            println!("cargo:warning=KittyMemory already exists, ensuring submodules are initialized");
             let sm_status = Command::new("git")
                 .current_dir(&dest)
-                .args(&["submodule", "update", "--init", "--recursive"]) 
+                .args(&["submodule", "update", "--init", "--recursive"])
                 .status();
 
             match sm_status {
@@ -103,6 +108,7 @@ fn main() {
         ];
 
         fn find_lib_dir(cands: &[PathBuf], target_os: &str, target_arch: &str) -> Option<PathBuf> {
+            // First pass: check standard paths
             for base in cands {
                 let libdir = match (target_os, target_arch) {
                     ("android", "aarch64") => base.join("libs-android/arm64-v8a"),
@@ -113,6 +119,7 @@ fn main() {
                     _ => base.join("libs"),
                 };
 
+                println!("cargo:warning=Checking libdir: {} (exists={})", libdir.display(), libdir.exists());
                 if libdir.exists() {
                     return Some(libdir);
                 }
@@ -125,15 +132,19 @@ fn main() {
                     ("ios", "aarch64") => base.join("libs-ios/arm64e"),
                     _ => base.join("libs"),
                 };
+                println!("cargo:warning=Checking alt libdir: {} (exists={})", alt.display(), alt.exists());
                 if alt.exists() {
                     return Some(alt);
                 }
             }
 
+            // Second pass: recursive search for libkeystone.a
             for base in cands {
                 if !base.exists() {
                     continue;
                 }
+
+                println!("cargo:warning=Searching recursively in: {}", base.display());
 
                 fn search_dir(dir: &PathBuf, depth: usize) -> Option<PathBuf> {
                     if depth == 0 {
@@ -153,6 +164,7 @@ fn main() {
                             if let Some(name) = p.file_name().and_then(|n| n.to_str()) {
                                 let lname = name.to_lowercase();
                                 if lname == "libkeystone.a" || (lname.contains("keystone") && lname.ends_with(".a")) {
+                                    println!("cargo:warning=Found keystone lib at: {}", p.display());
                                     return p.parent().map(|pp| pp.to_path_buf());
                                 }
                             }
@@ -162,6 +174,7 @@ fn main() {
                 }
 
                 if let Some(found) = search_dir(base, 6) {
+                    println!("cargo:warning=Found keystone lib dir: {}", found.display());
                     return Some(found);
                 }
             }
@@ -171,6 +184,14 @@ fn main() {
 
         for c in &candidates {
             println!("cargo:warning=Keystone candidate path: {} (exists={})", c.display(), c.exists());
+            if c.exists() {
+                // List contents of the candidate directory
+                if let Ok(entries) = fs::read_dir(c) {
+                    for entry in entries.flatten() {
+                        println!("cargo:warning=  -> {}", entry.path().display());
+                    }
+                }
+            }
         }
 
         if let Some(keystone_lib_dir) = find_lib_dir(&candidates, target_os.as_str(), target_arch.as_str()) {
