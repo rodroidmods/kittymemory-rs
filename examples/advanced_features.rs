@@ -72,7 +72,7 @@ fn demo_memory_dumping() {
 fn demo_patch_inspection() {
     println!("--- Patch Byte Inspection ---");
 
-    let mut patch = Patch::with_bytes(0x1000, &[0x90, 0x90, 0x90, 0x90]);
+    let patch = Patch::with_bytes(0x1000, &[0x90, 0x90, 0x90, 0x90]);
     println!("Patch created: valid={}", patch.is_valid());
 
     if let Ok(curr_bytes) = patch.get_curr_bytes() {
@@ -257,7 +257,10 @@ fn demo_android_advanced() {
 }
 
 #[cfg(not(target_os = "android"))]
-fn demo_android_advanced() {}
+#[allow(dead_code)]
+fn demo_android_advanced() {
+    // Stub for non-Android platforms
+}
 
 #[cfg(target_os = "android")]
 fn demo_native_bridge() {
@@ -289,4 +292,7 @@ fn demo_native_bridge() {
 }
 
 #[cfg(not(target_os = "android"))]
-fn demo_native_bridge() {}
+#[allow(dead_code)]
+fn demo_native_bridge() {
+    // Stub for non-Android platforms
+}

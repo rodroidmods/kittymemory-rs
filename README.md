@@ -58,14 +58,14 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-kittymemory-rs = "0.2"  # Recommended: auto-updates to latest stable 0.2.x
+kittymemory-rs = "0.3"  # Recommended: auto-updates to latest stable 0.3.x
 ```
 
 With Keystone assembler support:
 
 ```toml
 [dependencies]
-kittymemory-rs = { version = "0.2", features = ["keystone"] }
+kittymemory-rs = { version = "0.3", features = ["keystone"] }
 ```
 
 Or from GitHub:

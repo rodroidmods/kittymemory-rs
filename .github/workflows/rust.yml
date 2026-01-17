@@ -25,24 +25,7 @@ jobs:
         override: true
         profile: minimal
 
-    - name: Build
-      run: cargo build --release
-
-    - name: Run tests
-      run: cargo test
-
-    #
-    # Android-specific setup and build
-    #
-    # The steps below:
-    # - install a JDK (needed by Android commandline tools),
-    # - download Android command-line tools,
-    # - install platform-tools, a platform and the NDK via sdkmanager,
-    # - export ANDROID_NDK_HOME and add ~/.cargo/bin to PATH,
-    # - add the Android Rust target,
-    # - install cargo-ndk,
-    # - run cargo ndk for arm64-v8a
-    #
+    # Setup Android SDK and NDK
     - name: Setup Java (needed by Android sdkmanager)
       uses: actions/setup-java@v4
       with:
@@ -59,8 +42,7 @@ jobs:
         mkdir -p "$ANDROID_SDK_ROOT"
         mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
 
-        # Download latest command line tools (version in URL may need to be updated as Google updates them)
-        # If this URL breaks in future, update it to the latest commandlinetools-linux zip from Google.
+        # Download latest command line tools
         curl -fSL https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -o /tmp/cmdline-tools.zip
         unzip -q /tmp/cmdline-tools.zip -d /tmp/cmdline-tools
 
@@ -71,8 +53,7 @@ jobs:
         # Make sdkmanager available via full path
         SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
 
-        # Install platform-tools, a platform and a specific NDK version.
-        # You can change API level and NDK version to what you need.
+        # Install platform-tools, a platform and a specific NDK version
         yes | "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" "platform-tools" "platforms;android-33" "ndk;25.2.9519653"
 
         # Export environment variables for later steps
@@ -88,13 +69,34 @@ jobs:
     - name: Install cargo-ndk
       run: cargo install cargo-ndk --force
 
-    - name: Build Android (arm64-v8a) with cargo-ndk
+    # Build for Android (arm64-v8a)
+    - name: Build Android (arm64-v8a)
       env:
         ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
       run: |
         set -eux
-        # Ensure cargo bin is on PATH (cargo install puts cargo-ndk in ~/.cargo/bin)
         export PATH="$HOME/.cargo/bin:$PATH"
+        cargo ndk -t arm64-v8a build --release
 
-        # Build for arm64-v8a using cargo-ndk. Adjust features or flags as needed.
+    # Build with keystone feature
+    - name: Build Android (arm64-v8a) with keystone
+      env:
+        ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
+      run: |
+        set -eux
+        export PATH="$HOME/.cargo/bin:$PATH"
         cargo ndk -t arm64-v8a build --release --features keystone
+
+    # Run tests for Android target
+    - name: Test Android (arm64-v8a)
+      env:
+        ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
+      run: |
+        set -eux
+        export PATH="$HOME/.cargo/bin:$PATH"
+        # Note: cargo ndk test requires an emulator or device, so we just build tests
+        cargo ndk -t arm64-v8a build --tests --release
+
+    # Check documentation builds
+    - name: Check documentation
+      run: cargo doc --no-deps

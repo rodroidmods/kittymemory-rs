@@ -4,8 +4,17 @@ use std::process::Command;
 use std::fs;
 
 fn main() {
+    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    
+    // For docs.rs builds, use pre-generated bindings since network access is blocked
     if env::var("DOCS_RS").is_ok() {
-        println!("cargo:warning=Skipping native build and bindgen on docs.rs");
+        println!("cargo:warning=Using pre-generated bindings.rs for docs.rs");
+        println!("cargo:rerun-if-changed=bindings.rs");
+        // Copy the pre-generated bindings.rs to OUT_DIR
+        let src = PathBuf::from("bindings.rs");
+        let dst = out_path.join("bindings.rs");
+        fs::copy(&src, &dst).expect("Failed to copy pre-generated bindings.rs");
+        println!("cargo:warning=Copied bindings.rs to {}", dst.display());
         return;
     }
 
@@ -220,7 +229,6 @@ fn main() {
         .generate()
         .expect("Unable to generate bindings");
 
-    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     bindings
         .write_to_file(out_path.join("bindings.rs"))
         .expect("Couldn't write bindings!");

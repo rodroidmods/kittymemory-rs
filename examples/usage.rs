@@ -49,6 +49,7 @@ fn demo_memory_operations() {
     println!();
 }
 
+#[cfg(target_os = "android")]
 fn string2offset(hex_str: &str) -> usize {
     let clean = hex_str.trim().trim_start_matches("0x").trim_start_matches("0X");
     usize::from_str_radix(clean, 16).unwrap_or(0)
@@ -57,7 +58,7 @@ fn string2offset(hex_str: &str) -> usize {
 fn demo_patching() {
     println!("--- Memory Patching ---");
 
-    let mut patch = Patch::with_bytes(0x1000, &[0x90, 0x90, 0x90, 0x90]);
+    let patch = Patch::with_bytes(0x1000, &[0x90, 0x90, 0x90, 0x90]);
     println!("Patch created: valid={}", patch.is_valid());
     println!("Patch address: {:#x}", patch.address());
     println!("Patch size: {}", patch.size());

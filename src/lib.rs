@@ -38,7 +38,7 @@ mod tests {
     
     #[test]
     fn test_validator_creation() {
-        let validator = safe::PtrValidator::new();
-        assert!(validator.inner.handle.is_null() || !validator.inner.handle.is_null());
+        let _validator = safe::PtrValidator::new();
+        // Validator is created successfully - the Drop impl will clean it up
     }
 }
