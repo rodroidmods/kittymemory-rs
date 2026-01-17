@@ -49,6 +49,11 @@ fn demo_memory_operations() {
     println!();
 }
 
+fn string2offset(hex_str: &str) -> usize {
+    let clean = hex_str.trim().trim_start_matches("0x").trim_start_matches("0X");
+    usize::from_str_radix(clean, 16).unwrap_or(0)
+}
+
 fn demo_patching() {
     println!("--- Memory Patching ---");
 
@@ -70,10 +75,50 @@ fn demo_patching() {
         }
     }
 
+    #[cfg(target_os = "android")]
+    demo_library_patching();
+
     let backup = Backup::create(0x4000, 64);
     println!("Backup created: valid={}", backup.is_valid());
 
     println!();
+}
+
+#[cfg(target_os = "android")]
+fn demo_library_patching() {
+    println!("\n--- Library-Based Patching (Android) ---");
+
+    match Patch::with_hex_lib("libil2cpp.so", string2offset("0xD6D93C"), "62 01 0C 00 1E FF 2F E1") {
+        Ok(mut patch) => {
+            println!("Library hex patch created: valid={}", patch.is_valid());
+            println!("  Address: {:#x}", patch.address());
+            println!("  Size: {}", patch.size());
+            
+            if let Ok(orig) = patch.get_orig_bytes() {
+                println!("  Original bytes: {}", orig);
+            }
+            if let Ok(patch_bytes) = patch.get_patch_bytes() {
+                println!("  Patch bytes: {}", patch_bytes);
+            }
+        }
+        Err(e) => println!("Library hex patch error (expected if lib not loaded): {}", e),
+    }
+
+    match Patch::with_bytes_lib("libc.so", 0x1000, &[0x00, 0x00, 0xA0, 0xE3]) {
+        Ok(patch) => {
+            println!("Library bytes patch created: valid={}", patch.is_valid());
+            println!("  Address: {:#x}", patch.address());
+        }
+        Err(e) => println!("Library bytes patch error: {}", e),
+    }
+
+    #[cfg(feature = "keystone")]
+    {
+        match Patch::with_asm_lib("libil2cpp.so", 0xD6D93C, AsmArch::ARM32, "mov r0, #1; bx lr") {
+            Ok(patch) => println!("Library asm patch created: valid={}", patch.is_valid()),
+            Err(e) => println!("Library asm patch error: {}", e),
+        }
+    }
 }
 
 fn demo_pattern_scanning() {

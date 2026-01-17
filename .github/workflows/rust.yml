@@ -26,10 +26,10 @@ jobs:
         profile: minimal
 
     - name: Build
-      run: cargo build --verbose
+      run: cargo build --release
 
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test
 
     #
     # Android-specific setup and build

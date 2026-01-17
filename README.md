@@ -2,7 +2,7 @@
 
 Production-ready Rust bindings for [KittyMemory](https://github.com/MJx0/KittyMemory) — a comprehensive memory manipulation library for Android and iOS.
 
-> **⚠️ Important**: Use version **0.2.5 or higher**. Earlier versions (0.2.0-0.2.4) contain compilation issues for Android targets. Version 0.2.5+ is the official stable release.
+> **⚠️ Important**: Use version **0.3.0 or higher**. Version 0.3.0 includes complete feature parity with the original KittyMemory library with 100+ new functions and advanced capabilities.
 >
 > **Note**: The `keystone` feature for assembly patching is currently experimental and may have build issues. Use hex/bytes patching for production.
 
@@ -10,17 +10,26 @@ Production-ready Rust bindings for [KittyMemory](https://github.com/MJx0/KittyMe
 
 ### Core Functionality
 - **Memory Operations**: Read, write, and protect memory with automatic permission handling
+- **Syscall Memory Operations**: Alternative memory read/write using syscalls (Android)
+- **Memory Dumping**: Dump memory regions or memory-mapped files to disk
 - **Memory Patching**: Create patches from bytes, hex strings, or assembly code (with Keystone)
-- **Memory Backup**: Save and restore memory regions
+- **Patch Inspection**: Get current, original, and patch bytes as hex strings
+- **Memory Backup**: Save and restore memory regions with byte inspection
 - **Pattern Scanning**: Find byte patterns, hex patterns, IDA-style patterns, or arbitrary data
 - **Pointer Validation**: Verify if pointers are readable, writable, or executable
 
 ### Android-Specific Features
 - **ELF Scanner**: Comprehensive ELF analysis with symbol lookup, debug symbols, and metadata
+- **Advanced ELF Introspection**: Access program headers, dynamic section, hash tables, string/symbol tables
 - **LinkerScanner**: Access Android linker internals and enumerate all loaded libraries
-- **Process Maps**: Parse and filter /proc/self/maps entries
+- **LinkerScanner Extensions**: Get somain and sonext library information
+- **NativeBridgeScanner**: Full support for x86/x86_64 emulation on ARM (Houdini detection)
+- **NativeBridgeLinker**: dlopen, dlsym, dlerror, dladdr operations for native bridge
+- **Process Maps**: Parse and filter /proc/self/maps entries with helper methods
+- **ProcMap Helpers**: Validate maps, check for ELF headers, test address containment
 - **RegisterNativeFn**: Find JNI native method registrations by name and signature
 - **SoInfo Access**: Get detailed information about loaded shared objects
+- **Android System Info**: Get Android version, SDK level, and external storage path
 
 ### iOS-Specific Features
 - **MemoryFileInfo**: Access Mach-O binary information for dylibs and frameworks
@@ -29,9 +38,13 @@ Production-ready Rust bindings for [KittyMemory](https://github.com/MJx0/KittyMe
 - **Address Translation**: Convert relative offsets to absolute addresses
 
 ### Utility Functions
-- **Hex Conversion**: Convert between bytes and hex strings
+- **Hex Conversion**: Convert between bytes and hex strings with validation
 - **Hex Dump**: Format memory dumps with ASCII representation
 - **Page Helpers**: Calculate page-aligned addresses
+- **File Operations**: Complete file I/O abstraction (read, write, copy, delete, stat)
+- **String Utilities**: String manipulation (trim, validation, random generation)
+- **File Path Utilities**: Extract filename, directory, and extension from paths
+- **ZIP Utilities**: List ZIP files, extract by offset, memory-map ZIP contents (Android)
 
 ## Architecture
 
@@ -87,14 +100,47 @@ mem_write(addr, &42i32)?;
 ```rust
 use kittymemory_rs::prelude::*;
 
+// Basic patching with absolute address
 let mut patch = Patch::with_hex(0x1000, "90 90 90 90")?;
 patch.modify()?;
 patch.restore()?;
 ```
 
-With assembly (requires `keystone` feature):
+#### Library-Based Patching (Android)
+
+Create patches using library name + offset - just like the C++ API:
 
 ```rust
+#[cfg(target_os = "android")]
+use kittymemory::prelude::*;
+
+// Helper to convert hex string to offset
+fn string2offset(hex_str: &str) -> usize {
+    let clean = hex_str.trim().trim_start_matches("0x").trim_start_matches("0X");
+    usize::from_str_radix(clean, 16).unwrap_or(0)
+}
+
+// Create patch using library name + offset (like C++ MemoryPatch::createWithHex)
+let mut money_patch = Patch::with_hex_lib(
+    "libil2cpp.so",
+    string2offset("0xD6D93C"),
+    "62 01 0C 00 1E FF 2F E1"
+)?;
+money_patch.modify()?;
+
+// Or with raw bytes
+let mut bytes_patch = Patch::with_bytes_lib(
+    "libil2cpp.so",
+    0xD6D93C,
+    &[0x62, 0x01, 0x0C, 0x00, 0x1E, 0xFF, 0x2F, 0xE1]
+)?;
+bytes_patch.modify()?;
+```
+
+#### Assembly Patching (requires `keystone` feature)
+
+```rust
+// With absolute address
 let mut patch = Patch::with_asm(
     0x1000,
     AsmArch::ARM64,
@@ -102,6 +148,15 @@ let mut patch = Patch::with_asm(
     0x1000
 )?;
 patch.modify()?;
+
+// With library name + offset (Android only)
+#[cfg(target_os = "android")]
+let mut asm_patch = Patch::with_asm_lib(
+    "libil2cpp.so",
+    0xD6D93C,
+    AsmArch::ARM32,
+    "mov r0, #1; bx lr"
+)?;
 ```
 
 ### Pattern Scanning
@@ -224,11 +279,29 @@ cargo build --target aarch64-apple-ios --release
 
 ## Examples
 
-Run the comprehensive example:
+Run the basic example:
 
 ```bash
 cargo run --example usage
 ```
+
+Run the advanced features example (showcasing new v0.3.0 features):
+
+```bash
+cargo run --example advanced_features
+```
+
+The advanced example demonstrates:
+- Syscall-based memory operations (Android)
+- Memory dumping to disk
+- Patch and backup byte inspection
+- Advanced ELF scanner capabilities
+- ProcMap helper methods
+- String utilities
+- File path utilities
+- Android system information
+- Advanced linker scanner features
+- NativeBridge scanner (x86 emulation support)
 
 ## Documentation
 
@@ -278,6 +351,34 @@ MIT
 ## Contributing
 
 Contributions welcome! Open issues or submit pull requests.
+
+## Changelog
+
+### Version 0.3.0 (Latest)
+- **Complete Feature Parity**: Added 100+ new functions matching original KittyMemory library
+- **Library-Based Patching**: Create patches using library name + offset (Android)
+  - `Patch::with_hex_lib()` - Create hex patch with library name + offset
+  - `Patch::with_bytes_lib()` - Create bytes patch with library name + offset
+  - `Patch::with_asm_lib()` - Create assembly patch with library name + offset (requires keystone)
+- **Syscall Memory Operations**: Alternative memory read/write using syscalls (Android)
+- **Memory Dumping**: Dump memory regions or files to disk
+- **Patch/Backup Inspection**: Get current, original, and patch bytes as hex strings
+- **Advanced ELF Scanner**: Access program headers, dynamic section, hash tables, string/symbol tables
+- **ELF Refresh**: Refresh ELF scanner data
+- **LinkerScanner Extensions**: Get somain and sonext library information
+- **NativeBridgeScanner**: Full support for x86/x86_64 emulation on ARM (Houdini detection)
+- **NativeBridgeLinker**: dlopen, dlsym, dlerror, dladdr operations
+- **ProcMap Helpers**: Validation, ELF detection, address containment checks
+- **Android System Info**: Get Android version, SDK level, external storage
+- **String Utilities**: Trim, validation, random generation
+- **File Path Utilities**: Extract filename, directory, extension
+- **File I/O Abstraction**: Complete file operations wrapper
+- **ZIP Utilities**: List, extract, and memory-map ZIP contents (Android)
+- **Documentation**: Improved rustdoc support for crates.io publishing
+- **Examples**: New advanced_features example showcasing all new capabilities
+
+### Version 0.2.6
+- Previous stable release
 
 ## Disclaimer
 
