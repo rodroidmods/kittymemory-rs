@@ -118,7 +118,7 @@ uintptr_t km_elf_get_base(km_elf_scanner_t* scanner);
 uintptr_t km_elf_get_end(km_elf_scanner_t* scanner);
 uintptr_t km_elf_get_load_bias(km_elf_scanner_t* scanner);
 size_t km_elf_get_load_size(km_elf_scanner_t* scanner);
-const char* km_elf_get_path(km_elf_scanner_t* scanner);
+char* km_elf_get_path(km_elf_scanner_t* scanner);
 bool km_elf_is_zipped(km_elf_scanner_t* scanner);
 bool km_elf_is_native(km_elf_scanner_t* scanner);
 bool km_elf_is_emulated(km_elf_scanner_t* scanner);
@@ -134,8 +134,8 @@ size_t km_elf_get_string_table_size(km_elf_scanner_t* scanner);
 size_t km_elf_get_symbol_entry_size(km_elf_scanner_t* scanner);
 uintptr_t km_elf_get_elf_hash_table(km_elf_scanner_t* scanner);
 uintptr_t km_elf_get_gnu_hash_table(km_elf_scanner_t* scanner);
-const char* km_elf_get_file_path(km_elf_scanner_t* scanner);
-const char* km_elf_get_real_path(km_elf_scanner_t* scanner);
+char* km_elf_get_file_path(km_elf_scanner_t* scanner);
+char* km_elf_get_real_path(km_elf_scanner_t* scanner);
 bool km_elf_is_fixed_by_soinfo(km_elf_scanner_t* scanner);
 void km_elf_refresh(km_elf_scanner_t* scanner);
 
@@ -313,7 +313,7 @@ bool km_io_file_write_to_file_simple(km_io_file_t* file, const char* dest_path);
 bool km_io_file_write_to_fd(km_io_file_t* file, int fd);
 bool km_io_file_copy(const char* src_path, const char* dst_path);
 int km_io_file_last_error(km_io_file_t* file);
-const char* km_io_file_last_str_error(km_io_file_t* file);
+char* km_io_file_last_str_error(km_io_file_t* file);
 void km_io_file_free(km_io_file_t* file);
 
 #ifdef __ANDROID__

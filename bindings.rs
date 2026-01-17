@@ -467,7 +467,7 @@ extern "C" {
     pub fn km_io_file_last_error(file: *mut km_io_file_t) -> ::std::os::raw::c_int;
 }
 extern "C" {
-    pub fn km_io_file_last_str_error(file: *mut km_io_file_t) -> *const ::std::os::raw::c_char;
+    pub fn km_io_file_last_str_error(file: *mut km_io_file_t) -> *mut ::std::os::raw::c_char;
 }
 extern "C" {
     pub fn km_io_file_free(file: *mut km_io_file_t);

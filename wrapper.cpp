@@ -665,7 +665,7 @@ size_t km_elf_get_load_size(km_elf_scanner_t* scanner) {
     return it->second.loadSize();
 }
 
-const char* km_elf_get_path(km_elf_scanner_t* scanner) {
+char* km_elf_get_path(km_elf_scanner_t* scanner) {
     if (!scanner || !scanner->valid || !scanner->handle) return nullptr;
 
     std::lock_guard<std::mutex> lock(g_elf_scanners_mutex);
@@ -673,7 +673,12 @@ const char* km_elf_get_path(km_elf_scanner_t* scanner) {
     auto it = g_elf_scanners.find(id);
     if (it == g_elf_scanners.end()) return nullptr;
 
-    return it->second.realPath().c_str();
+    std::string path = it->second.realPath();
+    char* result = (char*)malloc(path.length() + 1);
+    if (result) {
+        strcpy(result, path.c_str());
+    }
+    return result;
 }
 
 bool km_elf_is_zipped(km_elf_scanner_t* scanner) {
@@ -819,7 +824,7 @@ uintptr_t km_elf_get_gnu_hash_table(km_elf_scanner_t* scanner) {
     return it->second.gnuHashTable();
 }
 
-const char* km_elf_get_file_path(km_elf_scanner_t* scanner) {
+char* km_elf_get_file_path(km_elf_scanner_t* scanner) {
     if (!scanner || !scanner->valid || !scanner->handle) return nullptr;
 
     std::lock_guard<std::mutex> lock(g_elf_scanners_mutex);
@@ -827,10 +832,15 @@ const char* km_elf_get_file_path(km_elf_scanner_t* scanner) {
     auto it = g_elf_scanners.find(id);
     if (it == g_elf_scanners.end()) return nullptr;
 
-    return it->second.filePath().c_str();
+    std::string path = it->second.filePath();
+    char* result = (char*)malloc(path.length() + 1);
+    if (result) {
+        strcpy(result, path.c_str());
+    }
+    return result;
 }
 
-const char* km_elf_get_real_path(km_elf_scanner_t* scanner) {
+char* km_elf_get_real_path(km_elf_scanner_t* scanner) {
     if (!scanner || !scanner->valid || !scanner->handle) return nullptr;
 
     std::lock_guard<std::mutex> lock(g_elf_scanners_mutex);
@@ -838,7 +848,12 @@ const char* km_elf_get_real_path(km_elf_scanner_t* scanner) {
     auto it = g_elf_scanners.find(id);
     if (it == g_elf_scanners.end()) return nullptr;
 
-    return it->second.realPath().c_str();
+    std::string path = it->second.realPath();
+    char* result = (char*)malloc(path.length() + 1);
+    if (result) {
+        strcpy(result, path.c_str());
+    }
+    return result;
 }
 
 bool km_elf_is_fixed_by_soinfo(km_elf_scanner_t* scanner) {
@@ -1858,9 +1873,14 @@ int km_io_file_last_error(km_io_file_t* file) {
     return ((KittyIOFile*)file->handle)->lastError();
 }
 
-const char* km_io_file_last_str_error(km_io_file_t* file) {
+char* km_io_file_last_str_error(km_io_file_t* file) {
     if (!file || !file->handle) return nullptr;
-    return ((KittyIOFile*)file->handle)->lastStrError().c_str();
+    std::string error = ((KittyIOFile*)file->handle)->lastStrError();
+    char* result = (char*)malloc(error.length() + 1);
+    if (result) {
+        strcpy(result, error.c_str());
+    }
+    return result;
 }
 
 void km_io_file_free(km_io_file_t* file) {

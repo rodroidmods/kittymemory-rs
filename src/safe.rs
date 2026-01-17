@@ -837,7 +837,9 @@ impl ElfScanner {
                 None
             } else {
                 let c_str = std::ffi::CStr::from_ptr(c_path);
-                Some(c_str.to_string_lossy().into_owned())
+                let result = c_str.to_string_lossy().into_owned();
+                sys::km_free_string(c_path);
+                Some(result)
             }
         }
     }
@@ -1004,7 +1006,9 @@ impl ElfScanner {
                 None
             } else {
                 let c_str = std::ffi::CStr::from_ptr(c_path);
-                Some(c_str.to_string_lossy().into_owned())
+                let result = c_str.to_string_lossy().into_owned();
+                sys::km_free_string(c_path);
+                Some(result)
             }
         }
     }
@@ -1021,7 +1025,9 @@ impl ElfScanner {
                 None
             } else {
                 let c_str = std::ffi::CStr::from_ptr(c_path);
-                Some(c_str.to_string_lossy().into_owned())
+                let result = c_str.to_string_lossy().into_owned();
+                sys::km_free_string(c_path);
+                Some(result)
             }
         }
     }
