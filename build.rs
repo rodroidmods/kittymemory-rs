@@ -6,26 +6,16 @@ use std::process::Command;
 fn main() {
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
 
-    let target = env::var("TARGET").unwrap_or_default();
-    let host = env::var("HOST").unwrap_or_default();
-    let is_cross_compiling = !target.is_empty() && !host.is_empty() && target != host;
-    let use_pregenerated_bindings = env::var("DOCS_RS").is_ok() || is_cross_compiling;
-
-    if use_pregenerated_bindings {
-        let reason = if env::var("DOCS_RS").is_ok() {
-            "docs.rs build"
-        } else {
-            "cross-compilation (libclang may not be available)"
-        };
-        println!(
-            "cargo:warning=Using pre-generated bindings.rs for {}",
-            reason
-        );
+    // For docs.rs builds, use pre-generated bindings since network access is blocked
+    if env::var("DOCS_RS").is_ok() {
+        println!("cargo:warning=Using pre-generated bindings.rs for docs.rs");
         println!("cargo:rerun-if-changed=bindings.rs");
+        // Copy the pre-generated bindings.rs to OUT_DIR
         let src = PathBuf::from("bindings.rs");
         let dst = out_path.join("bindings.rs");
         fs::copy(&src, &dst).expect("Failed to copy pre-generated bindings.rs");
         println!("cargo:warning=Copied bindings.rs to {}", dst.display());
+        return;
     }
 
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
@@ -279,26 +269,24 @@ fn main() {
 
     build.compile("kittymemory");
 
-    if !use_pregenerated_bindings {
-        let bindings = bindgen::Builder::default()
-            .header("wrapper.h")
-            .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
-            .allowlist_function("km_.*")
-            .allowlist_type("km_.*")
-            .allowlist_var("KM_.*")
-            .derive_debug(true)
-            .derive_default(true)
-            .derive_copy(true)
-            .derive_eq(true)
-            .derive_hash(true)
-            .derive_ord(true)
-            .derive_partialeq(true)
-            .derive_partialord(true)
-            .generate()
-            .expect("Unable to generate bindings");
+    let bindings = bindgen::Builder::default()
+        .header("wrapper.h")
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+        .allowlist_function("km_.*")
+        .allowlist_type("km_.*")
+        .allowlist_var("KM_.*")
+        .derive_debug(true)
+        .derive_default(true)
+        .derive_copy(true)
+        .derive_eq(true)
+        .derive_hash(true)
+        .derive_ord(true)
+        .derive_partialeq(true)
+        .derive_partialord(true)
+        .generate()
+        .expect("Unable to generate bindings");
 
-        bindings
-            .write_to_file(out_path.join("bindings.rs"))
-            .expect("Couldn't write bindings!");
-    }
+    bindings
+        .write_to_file(out_path.join("bindings.rs"))
+        .expect("Couldn't write bindings!");
 }

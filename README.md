@@ -4,7 +4,7 @@ Production-ready Rust bindings for [KittyMemory](https://github.com/MJx0/KittyMe
 
 > **⚠️ Important**: Use version **0.3.0 or higher**. Version 0.3.0 includes complete feature parity with the original KittyMemory library with 100+ new functions and advanced capabilities.
 >
-> **Note**: The `keystone` feature for assembly patching is currently experimental and may have build issues. Use hex/bytes patching for production.
+> **Note**: The `keystone` feature for assembly patching is currently experimental and may have build issues. Use hex/bytes patching for production. Windows currentely is not supported, you might get errors if you try to build it in a windows pc, its recomanded to use WSL2 to compile it for android.
 
 ## Features
 
