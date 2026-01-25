@@ -1,21 +1,31 @@
 use std::env;
+use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-use std::fs;
 
 fn main() {
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
-    
-    // For docs.rs builds, use pre-generated bindings since network access is blocked
-    if env::var("DOCS_RS").is_ok() {
-        println!("cargo:warning=Using pre-generated bindings.rs for docs.rs");
+
+    let target = env::var("TARGET").unwrap_or_default();
+    let host = env::var("HOST").unwrap_or_default();
+    let is_cross_compiling = !target.is_empty() && !host.is_empty() && target != host;
+    let use_pregenerated_bindings = env::var("DOCS_RS").is_ok() || is_cross_compiling;
+
+    if use_pregenerated_bindings {
+        let reason = if env::var("DOCS_RS").is_ok() {
+            "docs.rs build"
+        } else {
+            "cross-compilation (libclang may not be available)"
+        };
+        println!(
+            "cargo:warning=Using pre-generated bindings.rs for {}",
+            reason
+        );
         println!("cargo:rerun-if-changed=bindings.rs");
-        // Copy the pre-generated bindings.rs to OUT_DIR
         let src = PathBuf::from("bindings.rs");
         let dst = out_path.join("bindings.rs");
         fs::copy(&src, &dst).expect("Failed to copy pre-generated bindings.rs");
         println!("cargo:warning=Copied bindings.rs to {}", dst.display());
-        return;
     }
 
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
@@ -37,7 +47,12 @@ fn main() {
             println!("cargo:warning=Cloning KittyMemory into {}", dest.display());
             // Clone without --depth 1 to ensure submodules work properly
             let status = Command::new("git")
-                .args(&["clone", "--recursive", "https://github.com/MJx0/KittyMemory", dest.to_str().unwrap()])
+                .args(&[
+                    "clone",
+                    "--recursive",
+                    "https://github.com/MJx0/KittyMemory",
+                    dest.to_str().unwrap(),
+                ])
                 .status()
                 .expect("Failed to spawn git - ensure `git` is installed and in PATH");
             if !status.success() {
@@ -46,7 +61,9 @@ fn main() {
             println!("cargo:warning=Cloned KittyMemory with submodules");
         } else {
             // If dest exists, ensure submodules are initialized
-            println!("cargo:warning=KittyMemory already exists, ensuring submodules are initialized");
+            println!(
+                "cargo:warning=KittyMemory already exists, ensuring submodules are initialized"
+            );
             let sm_status = Command::new("git")
                 .current_dir(&dest)
                 .args(&["submodule", "update", "--init", "--recursive"])
@@ -57,10 +74,16 @@ fn main() {
                     println!("cargo:warning=Initialized git submodules for KittyMemory");
                 }
                 Ok(s) => {
-                    println!("cargo:warning=git submodule update exited with {} — continuing", s);
+                    println!(
+                        "cargo:warning=git submodule update exited with {} — continuing",
+                        s
+                    );
                 }
                 Err(e) => {
-                    println!("cargo:warning=Failed to run git submodule update: {} — continuing", e);
+                    println!(
+                        "cargo:warning=Failed to run git submodule update: {} — continuing",
+                        e
+                    );
                 }
             }
         }
@@ -89,7 +112,8 @@ fn main() {
         .file("wrapper.cpp");
 
     if cfg!(feature = "keystone") {
-        let target_arch = env::var("CARGO_CFG_TARGET_ARCH").expect("CARGO_CFG_TARGET_ARCH not set — are you cross-compiling properly?");
+        let target_arch = env::var("CARGO_CFG_TARGET_ARCH")
+            .expect("CARGO_CFG_TARGET_ARCH not set — are you cross-compiling properly?");
 
         let candidates = vec![
             out_dir.join("KittyMemory/KittyMemory/Deps/Keystone"),
@@ -119,7 +143,11 @@ fn main() {
                     _ => base.join("libs"),
                 };
 
-                println!("cargo:warning=Checking libdir: {} (exists={})", libdir.display(), libdir.exists());
+                println!(
+                    "cargo:warning=Checking libdir: {} (exists={})",
+                    libdir.display(),
+                    libdir.exists()
+                );
                 if libdir.exists() {
                     return Some(libdir);
                 }
@@ -132,7 +160,11 @@ fn main() {
                     ("ios", "aarch64") => base.join("libs-ios/arm64e"),
                     _ => base.join("libs"),
                 };
-                println!("cargo:warning=Checking alt libdir: {} (exists={})", alt.display(), alt.exists());
+                println!(
+                    "cargo:warning=Checking alt libdir: {} (exists={})",
+                    alt.display(),
+                    alt.exists()
+                );
                 if alt.exists() {
                     return Some(alt);
                 }
@@ -163,8 +195,13 @@ fn main() {
                         } else if p.is_file() {
                             if let Some(name) = p.file_name().and_then(|n| n.to_str()) {
                                 let lname = name.to_lowercase();
-                                if lname == "libkeystone.a" || (lname.contains("keystone") && lname.ends_with(".a")) {
-                                    println!("cargo:warning=Found keystone lib at: {}", p.display());
+                                if lname == "libkeystone.a"
+                                    || (lname.contains("keystone") && lname.ends_with(".a"))
+                                {
+                                    println!(
+                                        "cargo:warning=Found keystone lib at: {}",
+                                        p.display()
+                                    );
                                     return p.parent().map(|pp| pp.to_path_buf());
                                 }
                             }
@@ -183,7 +220,11 @@ fn main() {
         }
 
         for c in &candidates {
-            println!("cargo:warning=Keystone candidate path: {} (exists={})", c.display(), c.exists());
+            println!(
+                "cargo:warning=Keystone candidate path: {} (exists={})",
+                c.display(),
+                c.exists()
+            );
             if c.exists() {
                 // List contents of the candidate directory
                 if let Ok(entries) = fs::read_dir(c) {
@@ -194,8 +235,13 @@ fn main() {
             }
         }
 
-        if let Some(keystone_lib_dir) = find_lib_dir(&candidates, target_os.as_str(), target_arch.as_str()) {
-            println!("cargo:rustc-link-search=native={}", keystone_lib_dir.display());
+        if let Some(keystone_lib_dir) =
+            find_lib_dir(&candidates, target_os.as_str(), target_arch.as_str())
+        {
+            println!(
+                "cargo:rustc-link-search=native={}",
+                keystone_lib_dir.display()
+            );
             println!("cargo:rustc-link-lib=static=keystone");
         } else {
             println!("cargo:warning=Keystone libs not found in expected Deps paths; disabling keystone feature");
@@ -233,24 +279,26 @@ fn main() {
 
     build.compile("kittymemory");
 
-    let bindings = bindgen::Builder::default()
-        .header("wrapper.h")
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
-        .allowlist_function("km_.*")
-        .allowlist_type("km_.*")
-        .allowlist_var("KM_.*")
-        .derive_debug(true)
-        .derive_default(true)
-        .derive_copy(true)
-        .derive_eq(true)
-        .derive_hash(true)
-        .derive_ord(true)
-        .derive_partialeq(true)
-        .derive_partialord(true)
-        .generate()
-        .expect("Unable to generate bindings");
+    if !use_pregenerated_bindings {
+        let bindings = bindgen::Builder::default()
+            .header("wrapper.h")
+            .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+            .allowlist_function("km_.*")
+            .allowlist_type("km_.*")
+            .allowlist_var("KM_.*")
+            .derive_debug(true)
+            .derive_default(true)
+            .derive_copy(true)
+            .derive_eq(true)
+            .derive_hash(true)
+            .derive_ord(true)
+            .derive_partialeq(true)
+            .derive_partialord(true)
+            .generate()
+            .expect("Unable to generate bindings");
 
-    bindings
-        .write_to_file(out_path.join("bindings.rs"))
-        .expect("Couldn't write bindings!");
+        bindings
+            .write_to_file(out_path.join("bindings.rs"))
+            .expect("Couldn't write bindings!");
+    }
 }
