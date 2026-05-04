@@ -98,15 +98,15 @@ bool km_dump_mem_file_to_disk(const char* mem_file, const char* destination) {
 }
 
 int km_get_android_version(void) {
-    return KittyUtils::getAndroidVersion();
+    return KittyUtils::Android::getVersion();
 }
 
 int km_get_android_sdk(void) {
-    return KittyUtils::getAndroidSDK();
+    return KittyUtils::Android::getSDK();
 }
 
 char* km_get_external_storage(void) {
-    std::string storage = KittyUtils::getExternalStorage();
+    std::string storage = KittyUtils::Android::getExternalStorage();
     char* result = (char*)malloc(storage.length() + 1);
     if (result) {
         strcpy(result, storage.c_str());
@@ -1308,7 +1308,7 @@ uintptr_t km_native_bridge_scanner_sodl(km_native_bridge_scanner_t* scanner) {
     uintptr_t id = (uintptr_t)scanner->handle;
     auto it = g_native_bridge_scanners.find(id);
     if (it == g_native_bridge_scanners.end()) return 0;
-    return it->second.sodl();
+    return it->second.sohead();
 }
 
 bool km_native_bridge_scanner_get_sodl_info(km_native_bridge_scanner_t* scanner, km_soinfo_t* info) {
@@ -1319,7 +1319,7 @@ bool km_native_bridge_scanner_get_sodl_info(km_native_bridge_scanner_t* scanner,
     auto it = g_native_bridge_scanners.find(id);
     if (it == g_native_bridge_scanners.end()) return false;
 
-    KittyScanner::kitty_soinfo_t si = it->second.sodlInfo();
+    KittyScanner::kitty_soinfo_t si = it->second.soheadInfo();
     if (si.base == 0) return false;
 
     info->base = si.base;
@@ -1617,7 +1617,7 @@ void km_validator_free(km_ptr_validator_t* validator) {
 }
 
 char* km_data_to_hex(const void* data, size_t len) {
-    std::string hex = KittyUtils::data2Hex(data, len);
+    std::string hex = KittyUtils::Data::toHex(data, len);
     char* result = (char*)malloc(hex.length() + 1);
     if (result) {
         strcpy(result, hex.c_str());
@@ -1629,17 +1629,17 @@ bool km_hex_to_data(const char* hex, void* data, size_t data_len) {
     if (!hex || !data) return false;
 
     std::string hex_str(hex);
-    if (!KittyUtils::String::ValidateHex(hex_str)) return false;
+    if (!KittyUtils::String::validateHex(hex_str)) return false;
 
     size_t expected_len = hex_str.length() / 2;
     if (expected_len != data_len) return false;
 
-    KittyUtils::dataFromHex(hex_str, data);
+    KittyUtils::Data::fromHex(hex_str, data);
     return true;
 }
 
 char* km_hex_dump(const void* address, size_t len) {
-    std::string dump = KittyUtils::HexDump<16, true>(address, len);
+    std::string dump = KittyUtils::Data::hexDump<16, true>(address, len);
     char* result = (char*)malloc(dump.length() + 1);
     if (result) {
         strcpy(result, dump.c_str());
@@ -1653,7 +1653,7 @@ void km_free_string(char* str) {
 
 char* km_file_name_from_path(const char* file_path) {
     if (!file_path) return nullptr;
-    std::string name = KittyUtils::fileNameFromPath(std::string(file_path));
+    std::string name = KittyUtils::Path::fileName(std::string(file_path));
     char* result = (char*)malloc(name.length() + 1);
     if (result) {
         strcpy(result, name.c_str());
@@ -1663,7 +1663,7 @@ char* km_file_name_from_path(const char* file_path) {
 
 char* km_file_directory(const char* file_path) {
     if (!file_path) return nullptr;
-    std::string dir = KittyUtils::fileDirectory(std::string(file_path));
+    std::string dir = KittyUtils::Path::fileDirectory(std::string(file_path));
     char* result = (char*)malloc(dir.length() + 1);
     if (result) {
         strcpy(result, dir.c_str());
@@ -1673,7 +1673,7 @@ char* km_file_directory(const char* file_path) {
 
 char* km_file_extension(const char* file_path) {
     if (!file_path) return nullptr;
-    std::string ext = KittyUtils::fileExtension(std::string(file_path));
+    std::string ext = KittyUtils::Path::fileExtension(std::string(file_path));
     char* result = (char*)malloc(ext.length() + 1);
     if (result) {
         strcpy(result, ext.c_str());
@@ -1683,23 +1683,23 @@ char* km_file_extension(const char* file_path) {
 
 bool km_string_starts_with(const char* str, const char* prefix) {
     if (!str || !prefix) return false;
-    return KittyUtils::String::StartsWith(std::string(str), std::string(prefix));
+    return KittyUtils::String::startsWith(std::string(str), std::string(prefix));
 }
 
 bool km_string_contains(const char* str, const char* substr) {
     if (!str || !substr) return false;
-    return KittyUtils::String::Contains(std::string(str), std::string(substr));
+    return KittyUtils::String::contains(std::string(str), std::string(substr));
 }
 
 bool km_string_ends_with(const char* str, const char* suffix) {
     if (!str || !suffix) return false;
-    return KittyUtils::String::EndsWith(std::string(str), std::string(suffix));
+    return KittyUtils::String::endsWith(std::string(str), std::string(suffix));
 }
 
 char* km_string_trim(const char* str) {
     if (!str) return nullptr;
     std::string trimmed(str);
-    KittyUtils::String::Trim(trimmed);
+    KittyUtils::String::trim(trimmed);
     char* result = (char*)malloc(trimmed.length() + 1);
     if (result) {
         strcpy(result, trimmed.c_str());
@@ -1710,14 +1710,14 @@ char* km_string_trim(const char* str) {
 bool km_string_validate_hex(const char* hex) {
     if (!hex) return false;
     std::string hex_str(hex);
-    return KittyUtils::String::ValidateHex(hex_str);
+    return KittyUtils::String::validateHex(hex_str);
 }
 
 char* km_string_fmt(const char* fmt, ...) {
     if (!fmt) return nullptr;
     va_list args;
     va_start(args, fmt);
-    std::string result = KittyUtils::String::Fmt(fmt);
+    std::string result = KittyUtils::String::fmt(fmt);
     va_end(args);
     char* c_result = (char*)malloc(result.length() + 1);
     if (c_result) {
@@ -1727,7 +1727,7 @@ char* km_string_fmt(const char* fmt, ...) {
 }
 
 char* km_string_random(size_t length) {
-    std::string random_str = KittyUtils::String::Random(length);
+    std::string random_str = KittyUtils::randomString(length);
     char* result = (char*)malloc(random_str.length() + 1);
     if (result) {
         strcpy(result, random_str.c_str());
@@ -1740,10 +1740,10 @@ km_io_file_t km_io_file_create(const char* file_path, int flags, int mode) {
     if (!file_path) return result;
     KittyIOFile* file = new KittyIOFile(std::string(file_path), flags, mode);
     result.handle = file;
-    result.fd = file->FD();
-    result.file_path = file->Path().c_str();
-    result.flags = file->Flags();
-    result.mode = file->Mode();
+    result.fd = file->fd();
+    result.file_path = file->path().c_str();
+    result.flags = file->flags();
+    result.mode = file->mode();
     result.error = file->lastError();
     return result;
 }
@@ -1753,48 +1753,48 @@ km_io_file_t km_io_file_create_simple(const char* file_path, int flags) {
     if (!file_path) return result;
     KittyIOFile* file = new KittyIOFile(std::string(file_path), flags);
     result.handle = file;
-    result.fd = file->FD();
-    result.file_path = file->Path().c_str();
-    result.flags = file->Flags();
-    result.mode = file->Mode();
+    result.fd = file->fd();
+    result.file_path = file->path().c_str();
+    result.flags = file->flags();
+    result.mode = file->mode();
     result.error = file->lastError();
     return result;
 }
 
 bool km_io_file_open(km_io_file_t* file) {
     if (!file || !file->handle) return false;
-    return ((KittyIOFile*)file->handle)->Open();
+    return ((KittyIOFile*)file->handle)->open();
 }
 
 bool km_io_file_close(km_io_file_t* file) {
     if (!file || !file->handle) return false;
-    return ((KittyIOFile*)file->handle)->Close();
+    return ((KittyIOFile*)file->handle)->close();
 }
 
 ssize_t km_io_file_read(km_io_file_t* file, void* buffer, size_t len) {
     if (!file || !file->handle || !buffer) return -1;
-    return ((KittyIOFile*)file->handle)->Read(buffer, len);
+    return ((KittyIOFile*)file->handle)->read(buffer, len);
 }
 
 ssize_t km_io_file_write(km_io_file_t* file, const void* buffer, size_t len) {
     if (!file || !file->handle || !buffer) return -1;
-    return ((KittyIOFile*)file->handle)->Write(buffer, len);
+    return ((KittyIOFile*)file->handle)->write(buffer, len);
 }
 
 ssize_t km_io_file_read_offset(km_io_file_t* file, uintptr_t offset, void* buffer, size_t len) {
     if (!file || !file->handle || !buffer) return -1;
-    return ((KittyIOFile*)file->handle)->Read(offset, buffer, len);
+    return ((KittyIOFile*)file->handle)->pread(offset, buffer, len);
 }
 
 ssize_t km_io_file_write_offset(km_io_file_t* file, uintptr_t offset, const void* buffer, size_t len) {
     if (!file || !file->handle || !buffer) return -1;
-    return ((KittyIOFile*)file->handle)->Write(offset, buffer, len);
+    return ((KittyIOFile*)file->handle)->pwrite(offset, buffer, len);
 }
 
 bool km_io_file_exists(const char* file_path) {
     if (!file_path) return false;
     KittyIOFile file(std::string(file_path), 0);
-    return file.Exists();
+    return file.exists();
 }
 
 bool km_io_file_can_read(const char* file_path) {
@@ -1824,7 +1824,7 @@ bool km_io_file_is_file(const char* file_path) {
 bool km_io_file_delete(const char* file_path) {
     if (!file_path) return false;
     KittyIOFile file(std::string(file_path), 0);
-    return file.Delete();
+    return file.remove();
 }
 
 bool km_io_file_read_to_string(const char* file_path, char** out_str) {
@@ -1850,7 +1850,7 @@ bool km_io_file_read_to_buffer(const char* file_path, void** out_buffer, size_t*
 
 bool km_io_file_write_to_file(km_io_file_t* file, uintptr_t offset, size_t len, const char* dest_path) {
     if (!file || !file->handle || !dest_path) return false;
-    return ((KittyIOFile*)file->handle)->writeToFile(offset, len, std::string(dest_path));
+    return ((KittyIOFile*)file->handle)->writeOffsetToFile(offset, len, std::string(dest_path));
 }
 
 bool km_io_file_write_to_file_simple(km_io_file_t* file, const char* dest_path) {
@@ -1893,7 +1893,7 @@ void km_io_file_free(km_io_file_t* file) {
 #ifdef __ANDROID__
 size_t km_zip_list_files(const char* zip_path, km_zip_file_info_t** out_files) {
     if (!zip_path || !out_files) return 0;
-    std::vector<KittyUtils::Zip::ZipFileInfo> files = KittyUtils::Zip::listFilesInZip(std::string(zip_path));
+    std::vector<KittyUtils::Zip::ZipEntryInfo> files = KittyUtils::Zip::listEntriesInZip(std::string(zip_path));
     if (files.empty()) {
         *out_files = nullptr;
         return 0;
@@ -1922,7 +1922,10 @@ km_zip_file_info_t km_zip_get_file_info_by_offset(const char* zip_path, uint64_t
     km_zip_file_info_t result = {0};
     if (!zip_path) return result;
 
-    KittyUtils::Zip::ZipFileInfo info = KittyUtils::Zip::GetFileInfoByDataOffset(std::string(zip_path), data_offset);
+    KittyUtils::Zip::ZipEntryInfo info;
+    bool ok = KittyUtils::Zip::findEntryInfoByDataOffset(std::string(zip_path), data_offset, &info);
+    if (!ok) return result;
+
     strncpy(result.file_name, info.fileName.c_str(), 255);
     result.file_name[255] = '\0';
     result.compressed_size = info.compressedSize;
@@ -1940,7 +1943,10 @@ km_zip_file_mmap_t km_zip_mmap_file_by_offset(const char* zip_path, uint64_t dat
     km_zip_file_mmap_t result = {0};
     if (!zip_path) return result;
 
-    KittyUtils::Zip::ZipFileMMap mmap = KittyUtils::Zip::MMapFileByDataOffset(std::string(zip_path), data_offset);
+    KittyUtils::Zip::ZipEntryMMap mmap;
+    bool ok = KittyUtils::Zip::mmapEntryByDataOffset(std::string(zip_path), data_offset, &mmap);
+    if (!ok) return result;
+
     result.data = mmap.data;
     result.size = mmap.size;
 
