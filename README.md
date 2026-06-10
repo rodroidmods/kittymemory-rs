@@ -6,6 +6,8 @@ Production-ready Rust bindings for [KittyMemory](https://github.com/MJx0/KittyMe
 >
 > **Note**: The `keystone` feature for assembly patching is currently experimental and may have build issues. Use hex/bytes patching for production. Windows currentely is not supported, you might get errors if you try to build it in a windows pc, its recomanded to use WSL2 to compile it for android.
 
+**Fixed an issue that when you use kittymemory in windows, you would get an error** (v0.3.5)
+
 ## Features
 
 ### Core Functionality

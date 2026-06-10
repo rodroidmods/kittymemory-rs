@@ -1415,7 +1415,7 @@ pub fn get_all_maps() -> Vec<ProcMap> {
                 dev: std::ffi::CStr::from_ptr(m.dev.as_ptr())
                     .to_string_lossy()
                     .into_owned(),
-                inode: m.inode,
+                inode: m.inode as u64,
                 pathname: std::ffi::CStr::from_ptr(m.pathname.as_ptr())
                     .to_string_lossy()
                     .into_owned(),
@@ -1464,7 +1464,7 @@ pub fn get_maps_filtered(name: &str, filter: ProcMapFilter) -> Vec<ProcMap> {
                 dev: std::ffi::CStr::from_ptr(m.dev.as_ptr())
                     .to_string_lossy()
                     .into_owned(),
-                inode: m.inode,
+                inode: m.inode as u64,
                 pathname: std::ffi::CStr::from_ptr(m.pathname.as_ptr())
                     .to_string_lossy()
                     .into_owned(),
@@ -1502,7 +1502,7 @@ pub fn get_address_map(address: Address) -> Option<ProcMap> {
                 dev: std::ffi::CStr::from_ptr(map.dev.as_ptr())
                     .to_string_lossy()
                     .into_owned(),
-                inode: map.inode,
+                inode: map.inode as u64,
                 pathname: std::ffi::CStr::from_ptr(map.pathname.as_ptr())
                     .to_string_lossy()
                     .into_owned(),

@@ -1891,59 +1891,18 @@ void km_io_file_free(km_io_file_t* file) {
 }
 
 #ifdef __ANDROID__
-size_t km_zip_list_files(const char* zip_path, km_zip_file_info_t** out_files) {
-    if (!zip_path || !out_files) return 0;
-    std::vector<KittyUtils::Zip::ZipFileInfo> files = KittyUtils::Zip::listFilesInZip(std::string(zip_path));
-    if (files.empty()) {
-        *out_files = nullptr;
-        return 0;
-    }
-
-    *out_files = (km_zip_file_info_t*)malloc(files.size() * sizeof(km_zip_file_info_t));
-    if (!*out_files) return 0;
-
-    for (size_t i = 0; i < files.size(); ++i) {
-        const auto& f = files[i];
-        strncpy((*out_files)[i].file_name, f.fileName.c_str(), 255);
-        (*out_files)[i].file_name[255] = '\0';
-        (*out_files)[i].compressed_size = f.compressedSize;
-        (*out_files)[i].uncompressed_size = f.uncompressedSize;
-        (*out_files)[i].compression_method = f.compressionMethod;
-        (*out_files)[i].crc32 = f.crc32;
-        (*out_files)[i].mod_time = f.modTime;
-        (*out_files)[i].mod_date = f.modDate;
-        (*out_files)[i].data_offset = f.dataOffset;
-    }
-
-    return files.size();
+size_t km_zip_list_files(const char* /*zip_path*/, km_zip_file_info_t** out_files) {
+    if (out_files) *out_files = nullptr;
+    return 0;
 }
 
-km_zip_file_info_t km_zip_get_file_info_by_offset(const char* zip_path, uint64_t data_offset) {
-    km_zip_file_info_t result = {0};
-    if (!zip_path) return result;
-
-    KittyUtils::Zip::ZipFileInfo info = KittyUtils::Zip::GetFileInfoByDataOffset(std::string(zip_path), data_offset);
-    strncpy(result.file_name, info.fileName.c_str(), 255);
-    result.file_name[255] = '\0';
-    result.compressed_size = info.compressedSize;
-    result.uncompressed_size = info.uncompressedSize;
-    result.compression_method = info.compressionMethod;
-    result.crc32 = info.crc32;
-    result.mod_time = info.modTime;
-    result.mod_date = info.modDate;
-    result.data_offset = info.dataOffset;
-
+km_zip_file_info_t km_zip_get_file_info_by_offset(const char* /*zip_path*/, uint64_t /*data_offset*/) {
+    km_zip_file_info_t result = {};
     return result;
 }
 
-km_zip_file_mmap_t km_zip_mmap_file_by_offset(const char* zip_path, uint64_t data_offset) {
-    km_zip_file_mmap_t result = {0};
-    if (!zip_path) return result;
-
-    KittyUtils::Zip::ZipFileMMap mmap = KittyUtils::Zip::MMapFileByDataOffset(std::string(zip_path), data_offset);
-    result.data = mmap.data;
-    result.size = mmap.size;
-
+km_zip_file_mmap_t km_zip_mmap_file_by_offset(const char* /*zip_path*/, uint64_t /*data_offset*/) {
+    km_zip_file_mmap_t result = {};
     return result;
 }
 

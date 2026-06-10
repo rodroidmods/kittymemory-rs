@@ -48,7 +48,23 @@ fn main() {
             if !status.success() {
                 panic!("git clone failed with status: {}", status);
             }
-            println!("cargo:warning=Cloned KittyMemory with submodules");
+            // Pin to the commit immediately before the c950000 "reformat" rename pass.
+            // Upstream renamed StartsWith→startsWith / Fmt→fmt / etc. The wrapper.cpp here was
+            // written against the pre-rename API, so we pin until the wrapper is updated.
+            let pin_status = Command::new("git")
+                .current_dir(&dest)
+                .args(&["checkout", "33f7e46"])
+                .status()
+                .expect("Failed to spawn git for KittyMemory pin checkout");
+            if !pin_status.success() {
+                panic!("git checkout 33f7e46 failed");
+            }
+            // Re-init submodules at the pinned ref.
+            let _ = Command::new("git")
+                .current_dir(&dest)
+                .args(&["submodule", "update", "--init", "--recursive"])
+                .status();
+            println!("cargo:warning=Cloned KittyMemory @ 33f7e46 with submodules");
         } else {
             // If dest exists, ensure submodules are initialized
             println!(
@@ -269,8 +285,65 @@ fn main() {
 
     build.compile("kittymemory");
 
+    let ndk_home = env::var("ANDROID_NDK_HOME").unwrap_or_else(|_| {
+        env::var("NDK_HOME").expect("ANDROID_NDK_HOME or NDK_HOME must be set to build Kittymemory")
+    });
+    let host_tag = if cfg!(target_os = "windows") {
+        "windows-x86_64"
+    } else if cfg!(target_os = "macos") {
+        if cfg!(target_arch = "aarch64") { "darwin-arm64" } else { "darwin-x86_64" }
+    } else {
+        "linux-x86_64"
+    };
+    let ndk_sysroot = PathBuf::from(&ndk_home).join(format!("toolchains/llvm/prebuilt/{host_tag}/sysroot"));
+    let ndk_bin = PathBuf::from(&ndk_home).join(format!("toolchains/llvm/prebuilt/{host_tag}/bin"));
+    env::remove_var("CLANG_PATH");
+    let libclang_dirs = [
+        PathBuf::from(&ndk_home).join(format!("toolchains/llvm/prebuilt/{host_tag}/lib64")),
+        PathBuf::from(&ndk_home).join(format!("toolchains/llvm/prebuilt/{host_tag}/lib")),
+        ndk_bin.clone(),
+    ];
+    for dir in &libclang_dirs {
+        if dir.exists() {
+            env::set_var("LIBCLANG_PATH", dir);
+            break;
+        }
+    }
+    let clang_lib_include = {
+        let candidates = [
+            PathBuf::from(&ndk_home).join(format!("toolchains/llvm/prebuilt/{host_tag}/lib/clang")),
+            PathBuf::from(&ndk_home).join(format!("toolchains/llvm/prebuilt/{host_tag}/lib64/clang")),
+        ];
+        let mut found: Option<PathBuf> = None;
+        for base in &candidates {
+            if let Ok(entries) = fs::read_dir(base) {
+                if let Some(version_dir) = entries.flatten().next() {
+                    found = Some(version_dir.path().join("include"));
+                    break;
+                }
+            }
+        }
+        found.unwrap_or_else(|| panic!(
+            "Clang lib folder not found in any of: {:?}",
+            candidates.iter().map(|p| p.display().to_string()).collect::<Vec<_>>()
+        ))
+    };
+
+    let target_arch_for_bindgen = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_else(|_| "aarch64".to_string());
+    let (bindgen_target, bindgen_include_arch) = match target_arch_for_bindgen.as_str() {
+        "arm" => ("armv7a-linux-androideabi", "arm-linux-androideabi"),
+        "x86" => ("i686-linux-android", "i686-linux-android"),
+        "x86_64" => ("x86_64-linux-android", "x86_64-linux-android"),
+        _ => ("aarch64-linux-android", "aarch64-linux-android"),
+    };
+
     let bindings = bindgen::Builder::default()
         .header("wrapper.h")
+        .clang_arg(format!("--target={}", bindgen_target))
+        .clang_arg(format!("-I{}", clang_lib_include.display()))
+        .clang_arg(format!("-I{}/usr/include", ndk_sysroot.display()))
+        .clang_arg(format!("-I{}/usr/include/{}", ndk_sysroot.display(), bindgen_include_arch))
+        .clang_arg(format!("-I{}/usr/include/c++/v1", ndk_sysroot.display()))
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .allowlist_function("km_.*")
         .allowlist_type("km_.*")
